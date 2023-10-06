@@ -1,6 +1,20 @@
-# Project place file
+# Project place files
+*.rbxl 
 /ShiftUnlocked.rbxlx
 
 # Roblox Studio lock files
 /*.rbxlx.lock
 /*.rbxl.lock
+
+# Old Source Code
+OldSource
+
+# Wally
+Packages
+
+# Testing 
+Client
+
+# Moonwave 
+build
+docs

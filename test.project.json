@@ -1,11 +1,14 @@
 {
-  "name": "ShiftUnlocked",
+  "name": "ShiftUnlockedTesting",
   "tree": {
     "$className": "DataModel",
 
     "ReplicatedStorage": {
      "Packages": {
-      "$path": "Packages"
+      "$path": "Packages",
+      "ShiftUnlocked": {
+        "$path": "src"
+      }
      }
     },
 
@@ -15,7 +18,8 @@
 
     "StarterPlayer": {
       "StarterPlayerScripts": {
-      
+      "$className": "StarterPlayerScripts",
+      "$path": "Client"
       }
     },
 

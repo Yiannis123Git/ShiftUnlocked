@@ -5,4 +5,5 @@ registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 
 [dependencies]
-Janitor = "howmanysmall/janitor@^1.15.4"
+janitor = "howmanysmall/janitor@1.15.6"
+smartraycast = "yiannis123git/smartraycast@1.1.0"

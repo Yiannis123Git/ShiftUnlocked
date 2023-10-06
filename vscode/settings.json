@@ -1,6 +1,0 @@
-{
-    "[lua]": {
-        "editor.defualtFormatter": "JohnnyMorganc.stylua",
-        "editor.formatOnSave": true
-    }
-}
