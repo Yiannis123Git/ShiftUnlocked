@@ -365,8 +365,6 @@ function SUCamera:_Update(DT)
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
 		local Correction = HitPosition - self._CurrentCFrame.Position
 
-		print(Correction)
-
 		CameraCFrameInSubjectSpace = CameraCFrameInSubjectSpace + (-VecToFocus.Unit * Correction.Magnitude)
 	end
 
