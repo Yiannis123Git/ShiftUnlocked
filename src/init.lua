@@ -8,9 +8,9 @@
 /\__/ / | | | | | | |_| |_| | | | | | (_) | (__|   <  __/ (_| |
 \____/|_| |_|_|_|  \__|\___/|_| |_|_|\___/ \___|_|\_\___|\__,_|
                                                                                                                                   
-       -- A Third-Person Camera for the Roblox Engine -- 
- -- Give credit to Yiannis123 if you use this in your project -- 
-          -- Based on ShoulderCam by RefrenceGames -- 
+       -- A Third-Person Camera for the Roblox Engine --     
+  -- made by Yiannis123 credit would be appreciated if used -- 
+  -- Based on ShoulderCam by RefrenceGames and Roblox Source -- 
 ]]
 
 --// Services
@@ -22,6 +22,7 @@ local Players = game:GetService("Players")
 --// Modules
 local JanitorModule = require(script.Parent.janitor)
 local SmartRaycast = require(script.Parent.smartraycast)
+local Popper = require(script.ForkedPopper)
 
 --// Variables
 local LocalPlayer = Players.LocalPlayer
@@ -29,9 +30,9 @@ local GameSettings = UserSettings().GameSettings -- Updates RealTime
 local InternalChannelName = HttpService:GenerateGUID() -- This is done so we don't collide with any other user channels
 
 --// Settings Defualt Values
-
 local GCWarn = true
 local GlobalRaycastChannelName = InternalChannelName
+local AutoExcludeChars = true
 
 --// Gamepad thumbstick utilities //--
 
@@ -74,6 +75,80 @@ local function GamepadLinearToCurve(ThumbstickPosition)
 	)
 end
 
+--// Transform Extrapolator //--
+
+local IdentityCFrame = CFrame.new()
+
+local function CFrameToAxis(CFrame: CFrame): Vector3
+	local Axis: Vector3, Angle: number = CFrame:ToAxisAngle()
+	return Axis * Angle
+end
+
+local function AxisToCFrame(Axis: Vector3): CFrame
+	local Angle: number = Axis.Magnitude
+
+	if Angle > 1e-5 then
+		return CFrame.fromAxisAngle(Axis, Angle)
+	end
+
+	return IdentityCFrame
+end
+
+local function ExtractRotation(CF: CFrame): CFrame
+	local _, _, _, xx, yx, zx, xy, yy, zy, xz, yz, zz = CF:GetComponents()
+	return CFrame.new(0, 0, 0, xx, yx, zx, xy, yy, zy, xz, yz, zz)
+end
+
+local TransformExtrapolator = {}
+TransformExtrapolator.__index = TransformExtrapolator
+
+type TransformExtrapolatorProperties = {
+	LastFrame: CFrame?,
+}
+
+type TransformExtrapolator = typeof(setmetatable({} :: TransformExtrapolatorProperties, TransformExtrapolator))
+
+function TransformExtrapolator.new(): TransformExtrapolator
+	return setmetatable({
+		LastCFrame = nil,
+	} :: TransformExtrapolatorProperties, TransformExtrapolator)
+end
+
+function TransformExtrapolator:Step(
+	DT: number,
+	CurrentCFrame: CFrame
+): { Extrapolate: (number) -> CFrame, PosVelocity: Vector3, RotVelocity: Vector3 }
+	local LastCFrame = self.lastCFrame or CurrentCFrame
+	self.LastCFrame = CurrentCFrame
+
+	local CurrentPos = CurrentCFrame.Position
+	local CurrentRot = ExtractRotation(CurrentCFrame)
+
+	local LastPos = LastCFrame.Position
+	local LastRot = ExtractRotation(LastCFrame)
+
+	-- Estimate velocities from the delta between now and the last frame
+	-- This estimation can be a little noisy.
+	local DP = (CurrentPos - LastPos) / DT
+	local DR = CFrameToAxis(CurrentRot * LastRot:Inverse()) / DT
+
+	local function Extrapolate(t) -- get CFrame in the future t time?
+		local P = DP * t + CurrentPos
+		local R = AxisToCFrame(DR * t) * CurrentRot
+		return R + P
+	end
+
+	return {
+		Extrapolate = Extrapolate,
+		PosVelocity = DP,
+		RotVelocity = DR,
+	}
+end
+
+function TransformExtrapolator:Reset()
+	self.LastCFrame = nil
+end
+
 --// ShiftUnlocked Camera //--
 
 --[=[
@@ -87,6 +162,7 @@ SUCamera.__index = SUCamera
 
 SUCamera.GCWarn = GCWarn
 SUCamera.GlobalRaycastChannelName = GlobalRaycastChannelName
+SUCamera.AutoExcludeChars = AutoExcludeChars
 
 type SUCameraProperties = {
 	FOV: number,
@@ -109,10 +185,13 @@ type SUCameraProperties = {
 	_CurrentCamera: Camera?,
 	RaycastChannel: SmartRaycast.Channel | nil,
 	_MouseLocked: boolean,
-	_CurrentHumanoid: Humanoid?,
+	_CurrentHumanoid: Humanoid | nil,
 	_CurrentCFrame: CFrame,
 	ObstructionRange: number,
 	_LastDistanceFromRoot: number,
+	_CollisionRadius: number,
+	_TransformExtrapolator: TransformExtrapolator,
+	RotateCharacter: boolean,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -130,11 +209,12 @@ function SUCamera.new(): SUCamera
 	self.PitchLimit = 45 -- the max degrees the camera can angle up and down
 	self.LockedIcon = nil
 	self.UnlockedIcon = nil
-	self.MouseRadsPerPixel = Vector2.new(0.00872664619, 0.00671951752) -- make this reflect cam sensitivity setting?
+	self.MouseRadsPerPixel = Vector2.new(0.00872664619, 0.00671951752) -- dont worry to much about this setting
 	self.GamepadSensitivityModifier = Vector2.new(0.85, 0.65)
-	self.CameraOffset = Vector3.new(1.7, 1.5, 10) -- Legacy Default Value Vector3.new(1.75, 0, 0)
+	self.CameraOffset = Vector3.new(1.75, 1.5, 10) -- Z Axis will be ingnored (legay value 1.75,1.5)
 	self.RaycastChannel = nil
 	self.ObstructionRange = 6.5
+	self.RotateCharacter = true
 
 	-- State Variables
 
@@ -144,6 +224,7 @@ function SUCamera.new(): SUCamera
 	self._MouseLocked = true
 	self._CurrentCFrame = CFrame.new()
 	self._LastDistanceFromRoot = 0
+	self._CollisionRadius = self:_GetCollisionRadius()
 
 	-- Gamepad Variables
 
@@ -156,6 +237,7 @@ function SUCamera.new(): SUCamera
 	-- DataModel refrences
 
 	self._Janitor = JanitorModule.new()
+	self._TransformExtrapolator = TransformExtrapolator.new()
 	self._CurrentRootPart = nil
 	self._CurrentHumanoid = nil
 	self._CurrentCamera = nil
@@ -203,11 +285,21 @@ function SUCamera:SetEnabled(Enabled: boolean)
 					if Inst.Transparency == 1 or Inst.CanCollide == false then
 						return true
 					end
+
+					return false
 				end, Enum.RaycastFilterType.Exclude)
 			end
 
-			self.RaycastChannel = SmartRaycast.GetChannelObject(self.GlobalRaycastChannelName)
+			self.RaycastChannel = SmartRaycast.GetChannelObject(self.GlobalRaycastChannelName) :: SmartRaycast.Channel
 		end
+
+		-- Set Popper's ActiveSUCamera value
+
+		Popper.ActiveSUCamera = self
+
+		-- Enable Popper
+
+		Popper:SetEnabled(true)
 
 		-- Bind camera update function to render stepped
 
@@ -263,6 +355,32 @@ function SUCamera:SetEnabled(Enabled: boolean)
 			"Disconnect"
 		)
 
+		-- Connect Global Character Exclusion events
+
+		if
+			self.AutoExcludeChars == true
+			and self.RaycastChannel.RayParams.FilterType == Enum.RaycastFilterType.Exclude
+		then
+			local function CharacterAdded(Character)
+				self.RaycastChannel:AppendToFDI(Character)
+			end
+
+			local function PlayerAdded(Player: Player)
+				self._Janitor:Add(Player.CharacterAdded:Connect(CharacterAdded), "Disconnect", tostring(Player.UserId)) -- d
+			end
+
+			local function PlayerRemoving(Player: Player)
+				self._Janitor:Remove(tostring(Player.UserId))
+			end
+
+			for _, Player in Players:GetPlayers() do
+				PlayerAdded(Player)
+			end
+
+			self._Janitor:Add(Players.PlayerAdded:Connect(PlayerAdded), "Disconnect")
+			self._Janitor:Add(Players.PlayerRemoving:Connect(PlayerRemoving), "Disconnect")
+		end
+
 		-- Run '_CurrentCameraChanged' and '_OnCurrentCharacterChanged'
 
 		self:_OnCurrentCharacterChanged(LocalPlayer.Character)
@@ -271,6 +389,10 @@ function SUCamera:SetEnabled(Enabled: boolean)
 		-- Unbind camera update function from render stepped
 
 		RunService:UnbindFromRenderStep("SUCameraUpdate")
+
+		-- Disable Popper
+
+		Popper:SetEnabled(false)
 
 		-- Perform Janitor cleanup
 
@@ -295,7 +417,7 @@ function SUCamera:_Update(DT)
 
 	self:_ProccessGamepadInput(DT)
 
-	if self._CurrentRootPart == nil then
+	if self._CurrentRootPart == nil or self._CurrentCamera == nil then
 		return
 	end
 
@@ -307,9 +429,13 @@ function SUCamera:_Update(DT)
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	end
 
+	-- Set Camera FOV
+
+	self._CurrentCamera.FieldOfView = self.FOV
+
 	-- Initialize variables used for side correction, occlusion, and calculating camera focus/rotation
 
-	local CollisionRadius = self:_GetCollisionRadius() -- We run this every time since Viewport Size is not constant
+	local CollisionRadius = self._CollisionRadius
 
 	local RootPartPos = self._CurrentRootPart.CFrame.Position
 	local RootPartUnrotatedCFrame = CFrame.new(RootPartPos)
@@ -324,27 +450,22 @@ function SUCamera:_Update(DT)
 	local CameraYawRotationAndXOffset = YawRotation -- First rotate around the Y axis (look left/right)
 		* XOffset -- Then perform the desired offset (so camera is centered to side of player instead of directly on player)
 
-	local CameraFocus = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
+	self._CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
 
-	-- Handle/Calculate side correction when player is adjacent to a wall (so camera doesn't go in the wall)
+	--// Handle/Calculate side correction when player is adjacent to a wall (so camera doesn't go in the wall)
 
-	local VecToFocus = CameraFocus.Position - RootPartPos
+	local VecToFocus = self._CurrentCFrame.Position - RootPartPos
 	local RaycastResult =
 		workspace:Raycast(RootPartPos, VecToFocus + (VecToFocus.Unit * CollisionRadius), self.RaycastChannel.RayParams)
 
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = HitPosition - CameraFocus.Position
+		local Correction = HitPosition - self._CurrentCFrame.Position
 
 		-- Update cameraFocus to reflect side correction
 
 		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction.Magnitude)
-		CameraFocus = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
 	end
-
-	-- TEST FOCUS HERE AND AFTER HERE --
-
-	self._CurrentCamera.Focus = CameraFocus -- PROB DONE HERE DUE TO DEPRECATED CALL
 
 	-- Calculate CFrame for camera with x correction
 
@@ -355,29 +476,42 @@ function SUCamera:_Update(DT)
 
 	self._CurrentCFrame = RootPartUnrotatedCFrame * CameraCFrameInSubjectSpace
 
+	--// OCCLUSION
+
+	local Focus = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset * PitchRotation * YOffset
+	local RotatedFocus = CFrame.new(Focus.Position, self._CurrentCFrame.Position)
+		* CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
+
+	-- Get extrapolation result
+
+	local ExtrapolationResult = self._TransformExtrapolator:Step(DT, RotatedFocus)
+
+	-- Get Popper Distance
+
+	local Distance = (self._CurrentCFrame.Position - Focus.Position).Magnitude
+
+	local PopperResult = Popper.GetDistance(RotatedFocus, Distance, ExtrapolationResult)
+
 	-- Handle occlusion
 
-	VecToFocus = self._CurrentCFrame.Position - RootPartPos
-	RaycastResult =
-		workspace:Raycast(RootPartPos, VecToFocus + (VecToFocus.Unit * CollisionRadius), self.RaycastChannel.RayParams)
-
-	if RaycastResult then
-		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = HitPosition - self._CurrentCFrame.Position
-
-		CameraCFrameInSubjectSpace = CameraCFrameInSubjectSpace + (-VecToFocus.Unit * Correction.Magnitude)
-	end
+	local Correction = Distance - PopperResult
+	local CorrectionUnit = self._CurrentCFrame.LookVector.Unit
+	self._CurrentCFrame = self._CurrentCFrame + (CorrectionUnit * Correction)
 
 	-- Set Camera CFrame
 
-	self._CurrentCFrame = RootPartUnrotatedCFrame * CameraCFrameInSubjectSpace
 	self._CurrentCamera.CFrame = self._CurrentCFrame
+
+	-- Set Camera Focus
+
+	self._CurrentCamera.Focus = RootPartUnrotatedCFrame
+		* (CameraCFrameInSubjectSpace * CFrame.new(0, 0, CameraCFrameInSubjectSpace:Inverse().Position.Z))
 
 	-- Apply Character Rotation to match Camera (if needed)
 
-	if self._IsHumanoidControllable() == true or true then
+	if self._IsHumanoidControllable() == true and self.RotateCharacter then
 		self._CurrentHumanoid.AutoRotate = false
-		self._CurrentRootPart.CFrame = CFrame.Angles(0, self._Yaw, 0) + self._CurrentRootPart.Position -- Rotate character to be upright and facing the same direction as camera
+		self._CurrentRootPart.CFrame = CFrame.Angles(0, self._Yaw, 0) + self._CurrentRootPart.Position :: Vector3 -- Rotate character to be upright and facing the same direction as camera
 	end
 
 	self:_HandleCharacterTrasparency()
@@ -395,10 +529,28 @@ function SUCamera:_GetCollisionRadius()
 	local ImageWidth = ImageHeight * AspectRatio
 
 	local CornerPos = Vector3.new(ImageWidth, ImageHeight, self._CurrentCamera.NearPlaneZ)
+
 	return CornerPos.Magnitude
 end
 
-function SUCamera:_IsHumanoidControllable() end
+local ControllableStates = {
+	[Enum.HumanoidStateType.Running] = true,
+	[Enum.HumanoidStateType.RunningNoPhysics] = true,
+	[Enum.HumanoidStateType.Freefall] = true,
+	[Enum.HumanoidStateType.Jumping] = true,
+	[Enum.HumanoidStateType.Swimming] = false,
+	[Enum.HumanoidStateType.Landed] = true,
+}
+
+function SUCamera:_IsHumanoidControllable()
+	if not self._CurrentHumanoid then
+		return false
+	end
+
+	local HumanoidState = self._CurrentHumanoid:GetState()
+
+	return ControllableStates[HumanoidState] ~= nil
+end
 
 --// GC Method //--
 
@@ -518,9 +670,8 @@ end
 function SUCamera:_OnCurrentCharacterChanged(Character: Instance?)
 	if Character ~= nil then
 		local Humanoid = Character:WaitForChild("Humanoid") :: Humanoid
-		self._CurrentHumanoid = Humanoid
+		self._CurrentHumanoid = Humanoid :: Humanoid? -- typechecking issues...
 		self._CurrentRootPart = Humanoid.RootPart
-		self.RaycastChannel:AppendToFDI(Character)
 	else
 		self._CurrentHumanoid = nil
 		self._CurrentRootPart = nil
@@ -534,6 +685,7 @@ function SUCamera:_CurrentCameraChanged(Camera: Camera?)
 
 	if Camera ~= nil then
 		Camera.CameraType = Enum.CameraType.Scriptable
+		self._CollisionRadius = self:_GetCollisionRadius()
 
 		self._Janitor:Add(
 			Camera:GetPropertyChangedSignal("CameraType"):Connect(function()
@@ -542,13 +694,37 @@ function SUCamera:_CurrentCameraChanged(Camera: Camera?)
 			"Disconnect",
 			"CameraTypeChanged"
 		)
+
+		self._Janitor:Add(
+			Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+				self._CollisionRadius = self:_GetCollisionRadius()
+			end),
+			"Disconnect",
+			"ViewportSizeChanged"
+		)
+
+		self._Janitor:Add(
+			Camera:GetPropertyChangedSignal("FieldOfView"):Connect(function()
+				self._CollisionRadius = self:_GetCollisionRadius()
+			end),
+			"Disconnect",
+			"FieldOfViewChanged"
+		)
+
+		self._Janitor:Add(
+			Camera:GetPropertyChangedSignal("NearPlaneZ"):Connect(function()
+				self._CollisionRadius = self:_GetCollisionRadius()
+			end),
+			"Disconnect",
+			"NearPlaneZChanged"
+		)
 	end
 end
 
 --// Handle Character Obstructing view //--
 
 function SUCamera:_HandleCharacterTrasparency()
-	local Distance = (self._CurrentCFrame.Position - self._CurrentRootPart.Position).Magnitude
+	local Distance = (self._CurrentCFrame.Position :: Vector3 - self._CurrentRootPart.Position).Magnitude
 
 	if Distance <= self.ObstructionRange then
 		local ModifierValue = math.max(0.5, 1.1 - (Distance / self.ObstructionRange))
