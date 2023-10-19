@@ -413,6 +413,7 @@ end
 --// Camera Update //--
 
 function SUCamera:_Update(DT)
+	debug.profilebegin("ShiftUnlockedUpdate")
 	-- process gamepad input (regardless of if '_Update' can be performed to remain consistant with other input handling)
 
 	self:_ProccessGamepadInput(DT)
@@ -509,12 +510,14 @@ function SUCamera:_Update(DT)
 
 	-- Apply Character Rotation to match Camera (if needed)
 
-	if self._IsHumanoidControllable() == true and self.RotateCharacter then
+	if self:_IsHumanoidControllable() == true and self.RotateCharacter == true then
 		self._CurrentHumanoid.AutoRotate = false
 		self._CurrentRootPart.CFrame = CFrame.Angles(0, self._Yaw, 0) + self._CurrentRootPart.Position :: Vector3 -- Rotate character to be upright and facing the same direction as camera
 	end
 
 	self:_HandleCharacterTrasparency()
+
+	debug.profileend()
 end
 
 function SUCamera:_GetCollisionRadius()
@@ -549,7 +552,7 @@ function SUCamera:_IsHumanoidControllable()
 
 	local HumanoidState = self._CurrentHumanoid:GetState()
 
-	return ControllableStates[HumanoidState] ~= nil
+	return ControllableStates[HumanoidState]
 end
 
 --// GC Method //--
