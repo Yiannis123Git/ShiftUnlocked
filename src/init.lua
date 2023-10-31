@@ -192,6 +192,9 @@ type SUCameraProperties = {
 	_CollisionRadius: number,
 	_TransformExtrapolator: TransformExtrapolator,
 	RotateCharacter: boolean,
+	_CameraOffset: Vector3,
+	PopOutSpeed: number,
+	_LastSideCorrectionMagnitude: number,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -213,7 +216,8 @@ function SUCamera.new(): SUCamera
 	self.GamepadSensitivityModifier = Vector2.new(0.85, 0.65)
 	self.CameraOffset = Vector3.new(1.75, 1.5, 10) -- Z Axis will be ingnored (legay value 1.75,1.5)
 	self.RaycastChannel = nil
-	self.ObstructionRange = 6.5
+	self.ObstructionRange = 6.5 -- Distance from the camera required to start making the local character transparent
+	self.PopOutSpeed = 10 -- sec
 	self.RotateCharacter = true
 
 	-- State Variables
@@ -223,8 +227,13 @@ function SUCamera.new(): SUCamera
 	self._Yaw = 0
 	self._MouseLocked = true
 	self._CurrentCFrame = CFrame.new()
-	self._LastDistanceFromRoot = 0
 	self._CollisionRadius = self:_GetCollisionRadius()
+	self._CameraOffset = self.CameraOffset
+
+	-- Occlusion
+
+	self._LastDistanceFromRoot = 0
+	self._LastSideCorrectionMagnitude = math.abs(self.CameraOffset.X)
 
 	-- Gamepad Variables
 
@@ -292,6 +301,10 @@ function SUCamera:SetEnabled(Enabled: boolean)
 
 			self.RaycastChannel = SmartRaycast.GetChannelObject(self.GlobalRaycastChannelName) :: SmartRaycast.Channel
 		end
+
+		-- Set Occlusion Vars that need to be up to date with current data
+
+		self._LastSideCorrectionMagnitude = math.abs(self.CameraOffset.X)
 
 		-- Set Popper's ActiveSUCamera value
 
@@ -398,6 +411,12 @@ function SUCamera:SetEnabled(Enabled: boolean)
 
 		self._Janitor:cleanup()
 
+		-- Reset CameraType
+
+		if self._CurrentCamera then
+			self._CurrentCamera.CameraType = Enum.CameraType.Custom
+		end
+
 		-- Reset Camera State Variables
 
 		self._Pitch = 0
@@ -414,6 +433,7 @@ end
 
 function SUCamera:_Update(DT)
 	debug.profilebegin("ShiftUnlockedUpdate")
+
 	-- process gamepad input (regardless of if '_Update' can be performed to remain consistant with other input handling)
 
 	self:_ProccessGamepadInput(DT)
@@ -434,9 +454,15 @@ function SUCamera:_Update(DT)
 
 	self._CurrentCamera.FieldOfView = self.FOV
 
+	-- Calculate Actual Camera Offset
+
+	self._CameraOffset = self.CameraOffset
+
 	-- Initialize variables used for side correction, occlusion, and calculating camera focus/rotation
 
 	local CollisionRadius = self._CollisionRadius
+	local CorrectionReversionModifierX = (math.abs(self._CameraOffset.X) / self.PopOutSpeed) * DT
+	local CorrectionReversionModifierAll = (self._CameraOffset.Magnitude / self.PopOutSpeed) * DT
 
 	local RootPartPos = self._CurrentRootPart.CFrame.Position
 	local RootPartUnrotatedCFrame = CFrame.new(RootPartPos)
@@ -444,9 +470,9 @@ function SUCamera:_Update(DT)
 	local YawRotation = CFrame.Angles(0, self._Yaw, 0)
 	local PitchRotation = CFrame.Angles(self._Pitch, 0, 0)
 
-	local XOffset = CFrame.new(self.CameraOffset.X, 0, 0)
-	local YOffset = CFrame.new(0, self.CameraOffset.Y, 0)
-	local ZOffset = CFrame.new(0, 0, self.CameraOffset.Z)
+	local XOffset = CFrame.new(self._CameraOffset.X, 0, 0)
+	local YOffset = CFrame.new(0, self._CameraOffset.Y, 0)
+	local ZOffset = CFrame.new(0, 0, self._CameraOffset.Z)
 
 	local CameraYawRotationAndXOffset = YawRotation -- First rotate around the Y axis (look left/right)
 		* XOffset -- Then perform the desired offset (so camera is centered to side of player instead of directly on player)
@@ -468,6 +494,8 @@ function SUCamera:_Update(DT)
 		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction.Magnitude)
 	end
 
+	self._LastSideCorrectionMagnitude = CameraYawRotationAndXOffset.Position.Magnitude
+
 	-- Calculate CFrame for camera with x correction
 
 	local CameraCFrameInSubjectSpace = CameraYawRotationAndXOffset
@@ -480,6 +508,7 @@ function SUCamera:_Update(DT)
 	--// OCCLUSION
 
 	local Focus = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset * PitchRotation * YOffset
+
 	local RotatedFocus = CFrame.new(Focus.Position, self._CurrentCFrame.Position)
 		* CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
 
@@ -533,7 +562,7 @@ function SUCamera:_GetCollisionRadius()
 
 	local CornerPos = Vector3.new(ImageWidth, ImageHeight, self._CurrentCamera.NearPlaneZ)
 
-	return CornerPos.Magnitude
+	return CornerPos.Magnitude --/ 3
 end
 
 local ControllableStates = {
