@@ -21,3 +21,9 @@ Client
 # Moonwave 
 build
 docs
+
+# Debug
+Debug
+
+# Source Map
+sourcemap.json

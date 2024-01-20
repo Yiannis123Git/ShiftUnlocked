@@ -3,5 +3,6 @@
         "editor.defaultFormatter": "JohnnyMorganz.stylua",
         "editor.formatOnSave": true
     },
-    "robloxLsp.workspace.rojoProjectFile": "test"
+    "robloxLsp.workspace.rojoProjectFile": "test",
+    "stylua.targetReleaseVersion": "latest"
 }

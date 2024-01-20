@@ -36,9 +36,13 @@ local AutoExcludeChars = true
 
 --// Gamepad thumbstick utilities //--
 
+-- k (positive input) and LowerK (negative input) control thumbstick sensitivity; lower values for more responsive extremes, higher values for smoother, more linear control
+-- Adjust these values based on your needs
+-- Current setup has more precise postive value control and fast negative value control
+
 local k = 0.5 -- A higher k value makes the curve more linear. A lower k makes it more curved and accelerating
 local LowerK = 0.9 -- Same as k, but controls the lower portion of the S-curve for negative input values
-local DEADZONE = 0.25 -- his specifies the range of input values near 0 that will be mapped to 0 output. This creates a "deadzone" in the middle to prevent unintentional input.
+local DEADZONE = 0.25 -- this specifies the range of input values near 0 that will be mapped to 0 output. This creates a "deadzone" in the middle to prevent unintentional input.
 
 local function SCurveTransform(t: number)
 	t = math.clamp(t, -1, 1)
@@ -109,9 +113,12 @@ type TransformExtrapolatorProperties = {
 type TransformExtrapolator = typeof(setmetatable({} :: TransformExtrapolatorProperties, TransformExtrapolator))
 
 function TransformExtrapolator.new(): TransformExtrapolator
-	return setmetatable({
-		LastCFrame = nil,
-	} :: TransformExtrapolatorProperties, TransformExtrapolator)
+	return setmetatable(
+		{
+			LastCFrame = nil,
+		} :: TransformExtrapolatorProperties,
+		TransformExtrapolator
+	)
 end
 
 function TransformExtrapolator:Step(
@@ -132,7 +139,7 @@ function TransformExtrapolator:Step(
 	local DP = (CurrentPos - LastPos) / DT
 	local DR = CFrameToAxis(CurrentRot * LastRot:Inverse()) / DT
 
-	local function Extrapolate(t) -- get CFrame in the future t time?
+	local function Extrapolate(t: number) -- get CFrame in the future t time
 		local P = DP * t + CurrentPos
 		local R = AxisToCFrame(DR * t) * CurrentRot
 		return R + P
@@ -167,7 +174,7 @@ SUCamera.AutoExcludeChars = AutoExcludeChars
 type SUCameraProperties = {
 	FOV: number,
 	_Enabled: boolean,
-	_Janitor: any, -- Typechecking bug? Janitor type does not export properly
+	_Janitor: JanitorModule.Janitor,
 	LockedIcon: string?,
 	UnlockedIcon: string?,
 	PitchLimit: number,
@@ -192,9 +199,7 @@ type SUCameraProperties = {
 	_CollisionRadius: number,
 	_TransformExtrapolator: TransformExtrapolator,
 	RotateCharacter: boolean,
-	_CameraOffset: Vector3,
 	PopOutSpeed: number,
-	_LastSideCorrectionMagnitude: number,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -228,12 +233,10 @@ function SUCamera.new(): SUCamera
 	self._MouseLocked = true
 	self._CurrentCFrame = CFrame.new()
 	self._CollisionRadius = self:_GetCollisionRadius()
-	self._CameraOffset = self.CameraOffset
 
 	-- Occlusion
 
 	self._LastDistanceFromRoot = 0
-	self._LastSideCorrectionMagnitude = math.abs(self.CameraOffset.X)
 
 	-- Gamepad Variables
 
@@ -302,17 +305,13 @@ function SUCamera:SetEnabled(Enabled: boolean)
 			self.RaycastChannel = SmartRaycast.GetChannelObject(self.GlobalRaycastChannelName) :: SmartRaycast.Channel
 		end
 
-		-- Set Occlusion Vars that need to be up to date with current data
-
-		self._LastSideCorrectionMagnitude = math.abs(self.CameraOffset.X)
-
 		-- Set Popper's ActiveSUCamera value
 
-		Popper.ActiveSUCamera = self
+		Popper.ActiveSUCamera = self :: any -- Avoid typecheck issue due it expecting a nil value
 
 		-- Enable Popper
 
-		Popper:SetEnabled(true)
+		Popper.SetEnabled(true)
 
 		-- Bind camera update function to render stepped
 
@@ -379,7 +378,7 @@ function SUCamera:SetEnabled(Enabled: boolean)
 			end
 
 			local function PlayerAdded(Player: Player)
-				self._Janitor:Add(Player.CharacterAdded:Connect(CharacterAdded), "Disconnect", tostring(Player.UserId)) -- d
+				self._Janitor:Add(Player.CharacterAdded:Connect(CharacterAdded), "Disconnect", tostring(Player.UserId))
 			end
 
 			local function PlayerRemoving(Player: Player)
@@ -405,17 +404,21 @@ function SUCamera:SetEnabled(Enabled: boolean)
 
 		-- Disable Popper
 
-		Popper:SetEnabled(false)
+		Popper.SetEnabled(false)
 
 		-- Perform Janitor cleanup
 
-		self._Janitor:cleanup()
+		self._Janitor:Cleanup()
 
 		-- Reset CameraType
 
 		if self._CurrentCamera then
 			self._CurrentCamera.CameraType = Enum.CameraType.Custom
 		end
+
+		-- Reset Transform Extrapolator to avoid velocity spikes
+
+		self._TransformExtrapolator:Reset()
 
 		-- Reset Camera State Variables
 
@@ -427,6 +430,8 @@ function SUCamera:SetEnabled(Enabled: boolean)
 		self._CurrentGamepadSpeed = 0
 		self._LastGamepadVelocity = Vector2.new(0, 0)
 	end
+
+	self._Enabled = Enabled -- Might cause method to be droped if code yields for to long
 end
 
 --// Camera Update //--
@@ -454,15 +459,9 @@ function SUCamera:_Update(DT)
 
 	self._CurrentCamera.FieldOfView = self.FOV
 
-	-- Calculate Actual Camera Offset
-
-	self._CameraOffset = self.CameraOffset
-
 	-- Initialize variables used for side correction, occlusion, and calculating camera focus/rotation
 
 	local CollisionRadius = self._CollisionRadius
-	local CorrectionReversionModifierX = (math.abs(self._CameraOffset.X) / self.PopOutSpeed) * DT
-	local CorrectionReversionModifierAll = (self._CameraOffset.Magnitude / self.PopOutSpeed) * DT
 
 	local RootPartPos = self._CurrentRootPart.CFrame.Position
 	local RootPartUnrotatedCFrame = CFrame.new(RootPartPos)
@@ -470,46 +469,70 @@ function SUCamera:_Update(DT)
 	local YawRotation = CFrame.Angles(0, self._Yaw, 0)
 	local PitchRotation = CFrame.Angles(self._Pitch, 0, 0)
 
-	local XOffset = CFrame.new(self._CameraOffset.X, 0, 0)
-	local YOffset = CFrame.new(0, self._CameraOffset.Y, 0)
-	local ZOffset = CFrame.new(0, 0, self._CameraOffset.Z)
+	local XOffset = CFrame.new(self.CameraOffset.X, 0, 0)
+	local YOffset = CFrame.new(0, self.CameraOffset.Y, 0)
+	local ZOffset = CFrame.new(0, 0, self.CameraOffset.Z)
 
 	local CameraYawRotationAndXOffset = YawRotation -- First rotate around the Y axis (look left/right)
 		* XOffset -- Then perform the desired offset (so camera is centered to side of player instead of directly on player)
 
-	self._CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
+	local CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
 
-	--// Handle/Calculate side correction when player is adjacent to a wall (so camera doesn't go in the wall)
+	--// Handle/Calculate side correction when player is adjacent to a wall (so focus doesn't go in the wall)
 
-	local VecToFocus = self._CurrentCFrame.Position - RootPartPos
+	-- Right Vector correction
+
+	local VecToFocus = CurrentCFrame.Position - RootPartPos
 	local RaycastResult =
 		workspace:Raycast(RootPartPos, VecToFocus + (VecToFocus.Unit * CollisionRadius), self.RaycastChannel.RayParams)
 
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = HitPosition - self._CurrentCFrame.Position
+		local Correction = HitPosition - CurrentCFrame.Position
 
-		-- Update cameraFocus to reflect side correction
+		-- Update to reflect correction
 
 		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction.Magnitude)
+		CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
 	end
 
-	self._LastSideCorrectionMagnitude = CameraYawRotationAndXOffset.Position.Magnitude
+	-- Z Vector correction
 
-	-- Calculate CFrame for camera with x correction
+	local CameraPitchRotationAndYOffset = PitchRotation * YOffset
+	local CameraPitchYawRotationAndXYOffset = CameraYawRotationAndXOffset * CameraPitchRotationAndYOffset
 
-	local CameraCFrameInSubjectSpace = CameraYawRotationAndXOffset
-		* PitchRotation -- rotate around the X axis (look up/down)
-		* YOffset -- move camera up/vertically
-		* ZOffset -- move camera back
+	local CFrameWithPitchAndYOffset = RootPartUnrotatedCFrame -- Aka desired focus
+		* (CameraYawRotationAndXOffset * CameraPitchRotationAndYOffset)
 
-	self._CurrentCFrame = RootPartUnrotatedCFrame * CameraCFrameInSubjectSpace
+	local AnchorPoint =
+		Vector3.new(CurrentCFrame.Position.X, CFrameWithPitchAndYOffset.Position.Y, CurrentCFrame.Position.Z)
+
+	VecToFocus = CFrameWithPitchAndYOffset.Position - AnchorPoint
+	RaycastResult =
+		workspace:Raycast(AnchorPoint, VecToFocus + (VecToFocus.Unit * CollisionRadius), self.RaycastChannel.RayParams)
+
+	if RaycastResult then
+		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
+		local Correction = HitPosition - CFrameWithPitchAndYOffset.Position
+
+		-- Update to reflect correction
+		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset
+			+ (-VecToFocus.Unit * Correction.Magnitude)
+	end
+
+	-- Calculate Final Desired CFrame for camera with focus corrections
+
+	local CameraCFrameInSubjectSpace = CameraPitchYawRotationAndXYOffset * ZOffset -- move camera back
+
+	CurrentCFrame = RootPartUnrotatedCFrame * CameraCFrameInSubjectSpace
 
 	--// OCCLUSION
 
-	local Focus = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset * PitchRotation * YOffset
+	local Focus = RootPartUnrotatedCFrame * CameraPitchYawRotationAndXYOffset
 
-	local RotatedFocus = CFrame.new(Focus.Position, self._CurrentCFrame.Position)
+	-- Rotate CameraCFrame to face the opposite direction of the camera
+
+	local RotatedFocus = CFrame.new(Focus.Position, CurrentCFrame.Position)
 		* CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
 
 	-- Get extrapolation result
@@ -518,15 +541,19 @@ function SUCamera:_Update(DT)
 
 	-- Get Popper Distance
 
-	local Distance = (self._CurrentCFrame.Position - Focus.Position).Magnitude
+	local Distance = (CurrentCFrame.Position - Focus.Position).Magnitude
 
 	local PopperResult = Popper.GetDistance(RotatedFocus, Distance, ExtrapolationResult)
 
 	-- Handle occlusion
 
 	local Correction = Distance - PopperResult
-	local CorrectionUnit = self._CurrentCFrame.LookVector.Unit
-	self._CurrentCFrame = self._CurrentCFrame + (CorrectionUnit * Correction)
+	local CorrectionUnit = CurrentCFrame.LookVector.Unit
+	CurrentCFrame = CurrentCFrame + (CorrectionUnit * Correction)
+
+	-- Set Current CFrame
+
+	self._CurrentCFrame = CurrentCFrame
 
 	-- Set Camera CFrame
 
@@ -534,8 +561,7 @@ function SUCamera:_Update(DT)
 
 	-- Set Camera Focus
 
-	self._CurrentCamera.Focus = RootPartUnrotatedCFrame
-		* (CameraCFrameInSubjectSpace * CFrame.new(0, 0, CameraCFrameInSubjectSpace:Inverse().Position.Z))
+	self._CurrentCamera.Focus = Focus
 
 	-- Apply Character Rotation to match Camera (if needed)
 
@@ -562,7 +588,7 @@ function SUCamera:_GetCollisionRadius()
 
 	local CornerPos = Vector3.new(ImageWidth, ImageHeight, self._CurrentCamera.NearPlaneZ)
 
-	return CornerPos.Magnitude --/ 3
+	return CornerPos.Magnitude
 end
 
 local ControllableStates = {
@@ -594,9 +620,9 @@ function SUCamera:Destroy()
 		return
 	end
 
-	-- Unbind camera update function from render stepped
+	-- Set Enabled State to false
 
-	RunService:UnbindFromRenderStep("SUCameraUpdate")
+	self:SetEnabled(false)
 
 	-- Destroy Janitor
 
@@ -610,7 +636,7 @@ end
 --// Input Related //--
 
 function SUCamera:_ApplyInput(Yaw: number, Pitch: number) -- produces a Yaw and Pitch that can be used by the Update function
-	local YInvertValue = GameSettings:GetCameraYInvertValue()
+	local YInvertValue = GameSettings:GetCameraYInvertValue() -- 1 or -1 we need to change input acordingly if the camera is inverted
 	local PitchLimitToRadians = math.rad(math.clamp(self.PitchLimit, 1, 360))
 
 	self._Yaw = self._Yaw :: number + Yaw
@@ -619,6 +645,13 @@ end
 
 function SUCamera:_ProccessGamepadInput(DT: number) -- Produces a Yaw and Pitch from GamepadPan Vector2 to be applied via "_ApplyInput" method
 	local GamepadPan = GamepadLinearToCurve(self._GamepadPan)
+
+	local MaxGamepadSpeed = 6
+	local SpeedFactor = 10
+	local SpeedDivisor = 0.7
+	local SpeedAdjustment = 20
+	local VelocityThreshold = 12
+
 	local FinalConstant = 0
 	local CurrentTime = tick()
 
@@ -627,26 +660,26 @@ function SUCamera:_ProccessGamepadInput(DT: number) -- Produces a Yaw and Pitch 
 			self._CurrentGamepadSpeed = 0
 		end
 	else
-		local Elapsed = (CurrentTime - self._LastThumbstickTime) * 10
-		self._CurrentGamepadSpeed = self._CurrentGamepadSpeed + (6 * ((Elapsed ^ 2) / 0.7))
+		local Elapsed = (CurrentTime - self._LastThumbstickTime) * SpeedFactor
+		self._CurrentGamepadSpeed = self._CurrentGamepadSpeed + (MaxGamepadSpeed * ((Elapsed ^ 2) / SpeedDivisor))
 
-		if self._CurrentGamepadSpeed > 6 then
-			self._CurrentGamepadSpeed = 6
+		if self._CurrentGamepadSpeed > MaxGamepadSpeed then
+			self._CurrentGamepadSpeed = MaxGamepadSpeed
 		end
 
 		local Velocity = (GamepadPan - self._LastThumbstickPos) / (CurrentTime - self._LastThumbstickTime)
 		local VelocityDeltaMag = (Velocity - self._LastGamepadVelocity).Magnitude
 
-		if VelocityDeltaMag > 12 then
-			self._CurrentGamepadSpeed = self._CurrentGamepadSpeed * (20 / VelocityDeltaMag)
+		if VelocityDeltaMag > VelocityThreshold then
+			self._CurrentGamepadSpeed = self._CurrentGamepadSpeed * (SpeedAdjustment / VelocityDeltaMag)
 
-			if self._CurrentGamepadSpeed > 6 then
-				self._CurrentGamepadSpeed = 6
+			if self._CurrentGamepadSpeed > MaxGamepadSpeed then
+				self._CurrentGamepadSpeed = MaxGamepadSpeed
 			end
 		end
 
 		FinalConstant = GameSettings.GamepadCameraSensitivity * self._CurrentGamepadSpeed * DT
-		self._LastGamepadVelocity = (GamepadPan - self._LastThumbstickPos) / (CurrentTime - self._LastThumbstickTime)
+		self._LastGamepadVelocity = Velocity
 	end
 
 	self._LastThumbstickPos = GamepadPan

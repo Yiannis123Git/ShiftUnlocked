@@ -55,7 +55,7 @@ function OnCurrentCameraChanged(Camera: Camera?)
 	end
 end
 
-function Popper:SetEnabled(Enabled: boolean)
+function Popper.SetEnabled(Enabled: boolean)
 	if Enabled == true then
 		Janitor:Add(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(OnCurrentCameraChanged), "Disconnect")
 
@@ -115,7 +115,7 @@ function QueryPoint(Origin: Vector3, UnitDirection: Vector3, Distance: number, L
 			if Promote then
 				-- Ostensibly a soft limit, but the camera has passed through it in the last frame, so promote to a hard limit.
 				HardLimit = Limit
-			elseif Distance < SoftLimit then -- ! Change this to else later if needed !
+			elseif Distance < SoftLimit then
 				SoftLimit = Limit
 			end
 		else
@@ -195,7 +195,7 @@ function TestPromotion(
 	local CombinedSpeed = FocusExtrapolation.PosVelocity.Magnitude -- Metric that decides how many samples to take
 
 	for DT = 0, min(SampleMaxT, FocusExtrapolation.RotVelocity.Magnitude + MaxDistance / CombinedSpeed), SampleDT do
-		local CFDT = FocusExtrapolation.Extrapolate(DT) -- Extrapolated CFrame at time dt
+		local CFDT = FocusExtrapolation.Extrapolate(DT) -- Extrapolated CFrame at time dt in future
 		if QueryPoint(CFDT.Position, -CFDT.LookVector, Distance) >= Distance then
 			return false
 		end
@@ -215,6 +215,8 @@ function TestPromotion(
 end
 
 --// Get Distance (Popper) //--
+
+-- Returns the Maximum Distance from the Focus Point that the camera can have without clipping
 
 function Popper.GetDistance(Focus: CFrame, TargetDistance: number, FocusExtrapolation): number
 	local Distance = TargetDistance

@@ -8,6 +8,9 @@
       "$path": "Packages",
       "ShiftUnlocked": {
         "$path": "src"
+      },
+      "CastVisualizer": {
+        "$path": "Debug/CastVisualizer.lua"
       }
      }
     },
