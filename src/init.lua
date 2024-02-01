@@ -10,7 +10,7 @@
                                                                                                                                   
        -- A Third-Person Camera for the Roblox Engine --     
   -- made by Yiannis123 credit would be appreciated if used -- 
-  -- Based on ShoulderCam by RefrenceGames and Roblox Source -- 
+   -- Based on ShoulderCam Roblox module and Roblox Source -- 
 ]]
 
 --// Services
@@ -158,6 +158,22 @@ end
 
 --// ShiftUnlocked Camera //--
 
+function GetProperCorrection(LastCorrection: number, DT: number, ChangePerSec: number, CurrentCorrection: number): number
+	if LastCorrection == CurrentCorrection then
+		-- no action needed:
+		return LastCorrection
+	end
+
+	if CurrentCorrection > LastCorrection then
+		-- we need to ensure proper occlusion:
+		return CurrentCorrection
+	end
+
+	-- tween torwards the desired value
+
+	return math.max(CurrentCorrection, LastCorrection - (ChangePerSec * DT))
+end
+
 --[=[
 	The ShiftUnlocked Camera 
 
@@ -182,7 +198,7 @@ type SUCameraProperties = {
 	_Pitch: number,
 	MouseRadsPerPixel: Vector2,
 	_GamepadPan: Vector2,
-	_LastThumbstickTime: number?,
+	_LastThumbstickTime: number,
 	_LastThumbstickPos: Vector2,
 	GamepadSensitivityModifier: Vector2,
 	_CurrentGamepadSpeed: number,
@@ -196,10 +212,15 @@ type SUCameraProperties = {
 	_CurrentCFrame: CFrame,
 	ObstructionRange: number,
 	_LastDistanceFromRoot: number,
+	_LastCorrectionX: number,
+	_LastCorrectionZ: number,
+	_LastCorrectionOcclusion: number,
 	_CollisionRadius: number,
 	_TransformExtrapolator: TransformExtrapolator,
 	RotateCharacter: boolean,
 	PopOutSpeed: number,
+	VelocityOffset: boolean,
+	CorrectionReversionSpeed: number,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -224,6 +245,8 @@ function SUCamera.new(): SUCamera
 	self.ObstructionRange = 6.5 -- Distance from the camera required to start making the local character transparent
 	self.PopOutSpeed = 10 -- sec
 	self.RotateCharacter = true
+	self.VelocityOffset = true
+	self.CorrectionReversionSpeed = 3
 
 	-- State Variables
 
@@ -237,11 +260,14 @@ function SUCamera.new(): SUCamera
 	-- Occlusion
 
 	self._LastDistanceFromRoot = 0
+	self._LastCorrectionX = 0 
+	self._LastCorrectionZ = 0
+	self._LastCorrectionOcclusion = 0
 
 	-- Gamepad Variables
 
 	self._GamepadPan = Vector2.new(0, 0)
-	self._LastThumbstickTime = nil
+	self._LastThumbstickTime = 0 
 	self._LastThumbstickPos = Vector2.new(0, 0)
 	self._CurrentGamepadSpeed = 0
 	self._LastGamepadVelocity = Vector2.new(0, 0)
@@ -273,7 +299,7 @@ end
 
 --// Camera Enable Method //--
 
-function SUCamera:SetEnabled(Enabled: boolean)
+function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 	if Enabled == self._Enabled then
 		-- No need to perform any action:
 		return
@@ -369,12 +395,14 @@ function SUCamera:SetEnabled(Enabled: boolean)
 
 		-- Connect Global Character Exclusion events
 
+		local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel -- I love typechecking
+
 		if
 			self.AutoExcludeChars == true
-			and self.RaycastChannel.RayParams.FilterType == Enum.RaycastFilterType.Exclude
+			and RaycastChannel.RayParams.FilterType == Enum.RaycastFilterType.Exclude
 		then
 			local function CharacterAdded(Character)
-				self.RaycastChannel:AppendToFDI(Character)
+				RaycastChannel:AppendToFDI(Character)
 			end
 
 			local function PlayerAdded(Player: Player)
@@ -425,7 +453,6 @@ function SUCamera:SetEnabled(Enabled: boolean)
 		self._Pitch = 0
 		self._Yaw = 0
 		self._GamepadPan = Vector2.new(0, 0)
-		self._LastThumbstickTime = nil
 		self._LastThumbstickPos = Vector2.new(0, 0)
 		self._CurrentGamepadSpeed = 0
 		self._LastGamepadVelocity = Vector2.new(0, 0)
@@ -436,14 +463,15 @@ end
 
 --// Camera Update //--
 
-function SUCamera:_Update(DT)
+function SUCamera._Update(self: SUCamera, DT)
 	debug.profilebegin("ShiftUnlockedUpdate")
 
 	-- process gamepad input (regardless of if '_Update' can be performed to remain consistant with other input handling)
 
 	self:_ProccessGamepadInput(DT)
 
-	if self._CurrentRootPart == nil or self._CurrentCamera == nil then
+	if self._CurrentRootPart == nil or self._CurrentCamera == nil or self._CurrentHumanoid == nil then
+		-- Cannot perform update operation:
 		return
 	end
 
@@ -461,7 +489,11 @@ function SUCamera:_Update(DT)
 
 	-- Initialize variables used for side correction, occlusion, and calculating camera focus/rotation
 
+	local CorrectionReversionSpeed = self.CorrectionReversionSpeed
+
 	local CollisionRadius = self._CollisionRadius
+
+	local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel 
 
 	local RootPartPos = self._CurrentRootPart.CFrame.Position
 	local RootPartUnrotatedCFrame = CFrame.new(RootPartPos)
@@ -484,15 +516,26 @@ function SUCamera:_Update(DT)
 
 	local VecToFocus = CurrentCFrame.Position - RootPartPos
 	local RaycastResult =
-		workspace:Raycast(RootPartPos, VecToFocus + (VecToFocus.Unit * CollisionRadius), self.RaycastChannel.RayParams)
+		workspace:Raycast(RootPartPos, VecToFocus + (VecToFocus.Unit * CollisionRadius), RaycastChannel.RayParams)
 
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = HitPosition - CurrentCFrame.Position
+		local Correction = GetProperCorrection(self._LastCorrectionX,DT,CorrectionReversionSpeed,(HitPosition - CurrentCFrame.Position).Magnitude)
+
+		self._LastCorrectionX = Correction
 
 		-- Update to reflect correction
 
-		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction.Magnitude)
+		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction)
+		CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
+	elseif self._LastCorrectionX ~= 0 then
+		local Correction = GetProperCorrection(self._LastCorrectionX,DT,CorrectionReversionSpeed,0)
+
+		self._LastCorrectionX = Correction
+
+		-- Update to reflect correction
+
+		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction)
 		CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
 	end
 
@@ -509,15 +552,27 @@ function SUCamera:_Update(DT)
 
 	VecToFocus = CFrameWithPitchAndYOffset.Position - AnchorPoint
 	RaycastResult =
-		workspace:Raycast(AnchorPoint, VecToFocus + (VecToFocus.Unit * CollisionRadius), self.RaycastChannel.RayParams)
+		workspace:Raycast(AnchorPoint, VecToFocus + (VecToFocus.Unit * CollisionRadius), RaycastChannel.RayParams)
 
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = HitPosition - CFrameWithPitchAndYOffset.Position
+		local Correction = GetProperCorrection(self._LastCorrectionZ,DT,CorrectionReversionSpeed,(HitPosition - CFrameWithPitchAndYOffset.Position).Magnitude)
+
+		self._LastCorrectionZ = Correction
 
 		-- Update to reflect correction
+
 		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset
-			+ (-VecToFocus.Unit * Correction.Magnitude)
+			+ (-VecToFocus.Unit * Correction)
+	elseif self._LastCorrectionZ ~= 0 then
+		local Correction = GetProperCorrection(self._LastCorrectionZ,DT,CorrectionReversionSpeed,0)
+
+		self._LastCorrectionZ = Correction
+
+		-- Update to reflect correction
+
+		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset
+			+ (-VecToFocus.Unit * Correction)
 	end
 
 	-- Calculate Final Desired CFrame for camera with focus corrections
@@ -547,7 +602,8 @@ function SUCamera:_Update(DT)
 
 	-- Handle occlusion
 
-	local Correction = Distance - PopperResult
+	local Correction = GetProperCorrection(self._LastCorrectionOcclusion,DT,CorrectionReversionSpeed * 3,Distance - PopperResult)
+	self._LastCorrectionOcclusion = Correction
 	local CorrectionUnit = CurrentCFrame.LookVector.Unit
 	CurrentCFrame = CurrentCFrame + (CorrectionUnit * Correction)
 
@@ -575,7 +631,7 @@ function SUCamera:_Update(DT)
 	debug.profileend()
 end
 
-function SUCamera:_GetCollisionRadius()
+function SUCamera._GetCollisionRadius(self: SUCamera)
 	if self._CurrentCamera == nil then
 		return 0
 	end
@@ -600,7 +656,7 @@ local ControllableStates = {
 	[Enum.HumanoidStateType.Landed] = true,
 }
 
-function SUCamera:_IsHumanoidControllable()
+function SUCamera._IsHumanoidControllable(self: SUCamera)
 	if not self._CurrentHumanoid then
 		return false
 	end
@@ -612,7 +668,7 @@ end
 
 --// GC Method //--
 
-function SUCamera:Destroy()
+function SUCamera.Destroy(self: SUCamera)
 	local CameraLogIndex = table.find(CameraLog, self)
 
 	if CameraLogIndex == nil then
@@ -635,7 +691,7 @@ end
 
 --// Input Related //--
 
-function SUCamera:_ApplyInput(Yaw: number, Pitch: number) -- produces a Yaw and Pitch that can be used by the Update function
+function SUCamera._ApplyInput(self: SUCamera, Yaw: number, Pitch: number) -- produces a Yaw and Pitch that can be used by the Update function
 	local YInvertValue = GameSettings:GetCameraYInvertValue() -- 1 or -1 we need to change input acordingly if the camera is inverted
 	local PitchLimitToRadians = math.rad(math.clamp(self.PitchLimit, 1, 360))
 
@@ -643,7 +699,7 @@ function SUCamera:_ApplyInput(Yaw: number, Pitch: number) -- produces a Yaw and 
 	self._Pitch = math.clamp(self._Pitch :: number + Pitch * YInvertValue, -PitchLimitToRadians, PitchLimitToRadians)
 end
 
-function SUCamera:_ProccessGamepadInput(DT: number) -- Produces a Yaw and Pitch from GamepadPan Vector2 to be applied via "_ApplyInput" method
+function SUCamera._ProccessGamepadInput(self: SUCamera, DT: number) -- Produces a Yaw and Pitch from GamepadPan Vector2 to be applied via "_ApplyInput" method
 	local GamepadPan = GamepadLinearToCurve(self._GamepadPan)
 
 	local MaxGamepadSpeed = 6
@@ -694,7 +750,7 @@ function SUCamera:_ProccessGamepadInput(DT: number) -- Produces a Yaw and Pitch 
 	self:_ApplyInput(YawInput, PitchInput)
 end
 
-function SUCamera:_OnInputChanged(InputObject: InputObject, GameProccessed: boolean)
+function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
 	if GameProccessed == true then
 		return
 	end
@@ -710,7 +766,7 @@ function SUCamera:_OnInputChanged(InputObject: InputObject, GameProccessed: bool
 	end
 end
 
-function SUCamera:_OnInputBegun(InputObject: InputObject, GameProccessed: boolean)
+function SUCamera._OnInputBegun(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
 	if GameProccessed == true then
 		return
 	end
@@ -720,7 +776,7 @@ function SUCamera:_OnInputBegun(InputObject: InputObject, GameProccessed: boolea
 	end
 end
 
-function SUCamera:_OnInputEnded(InputObject: InputObject, GameProccessed: boolean)
+function SUCamera._OnInputEnded(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
 	if GameProccessed == true then
 		return
 	end
@@ -732,7 +788,7 @@ end
 
 --//  Character Removed/Added //--
 
-function SUCamera:_OnCurrentCharacterChanged(Character: Instance?)
+function SUCamera._OnCurrentCharacterChanged(self: SUCamera, Character: Instance?)
 	if Character ~= nil then
 		local Humanoid = Character:WaitForChild("Humanoid") :: Humanoid
 		self._CurrentHumanoid = Humanoid :: Humanoid? -- typechecking issues...
@@ -745,7 +801,7 @@ end
 
 --// CurrentCamera Changed //--
 
-function SUCamera:_CurrentCameraChanged(Camera: Camera?)
+function SUCamera._CurrentCameraChanged(self: SUCamera, Camera: Camera?)
 	self._CurrentCamera = Camera
 
 	if Camera ~= nil then
@@ -788,22 +844,26 @@ end
 
 --// Handle Character Obstructing view //--
 
-function SUCamera:_HandleCharacterTrasparency()
-	local Distance = (self._CurrentCFrame.Position :: Vector3 - self._CurrentRootPart.Position).Magnitude
+function SUCamera._HandleCharacterTrasparency(self: SUCamera)
+	local CurrentRootPart = self._CurrentRootPart :: BasePart
+	local CurrentHumanoid = self._CurrentHumanoid :: Humanoid
+	local Character = CurrentHumanoid.Parent :: Model
 
+	local Distance = (self._CurrentCFrame.Position :: Vector3 - CurrentRootPart.Position).Magnitude
+	
 	if Distance <= self.ObstructionRange then
 		local ModifierValue = math.max(0.5, 1.1 - (Distance / self.ObstructionRange))
 
-		for _, Descendant in pairs(self._CurrentHumanoid.Parent:GetDescendants()) do
-			if Descendant:IsA("MeshPart") or Descendant:IsA("Part") then
+		for _, Descendant in pairs(Character:GetDescendants()) do
+			if Descendant:IsA("BasePart") then
 				Descendant.LocalTransparencyModifier = ModifierValue
 			end
 		end
 	elseif self._LastDistanceFromRoot <= self.ObstructionRange then
 		local ModifierValue = 0
 
-		for _, Descendant in pairs(self._CurrentHumanoid.Parent:GetDescendants()) do
-			if Descendant:IsA("MeshPart") or Descendant:IsA("Part") then
+		for _, Descendant in pairs(Character:GetDescendants()) do
+			if Descendant:IsA("BasePart") then
 				Descendant.LocalTransparencyModifier = ModifierValue
 			end
 		end
