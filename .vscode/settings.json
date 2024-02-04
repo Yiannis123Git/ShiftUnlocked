@@ -3,6 +3,10 @@
         "editor.defaultFormatter": "JohnnyMorganz.stylua",
         "editor.formatOnSave": true
     },
+    "[luau]": {
+        "editor.defaultFormatter": "JohnnyMorganz.stylua",
+        "editor.formatOnSave": true
+    },
     "robloxLsp.workspace.rojoProjectFile": "test",
     "stylua.targetReleaseVersion": "latest",
     "luau-lsp.sourcemap.rojoProjectFile": "test.project.json"

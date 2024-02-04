@@ -16,8 +16,8 @@ local tan = math.tan
 local rad = math.rad
 local inf = math.huge
 
-function UpdateProjection()
-	local FOV = rad(CurrentCamera.FieldOfView)
+function UpdateProjection() -- Update vertical and horizontal dimensions of the near plane (Measured in studs)
+	local FOV = rad(CurrentCamera.FieldOfView) -- Y Axis FOV
 	local View = CurrentCamera.ViewportSize
 	local AspectRatio = View.X / View.Y -- Aspect Ratio
 
@@ -80,12 +80,14 @@ end
 
 --// Query Point //--
 
+-- Query a point in world space and return a hard or soft limit
+
 local QueryPointParams = RaycastParams.new()
 QueryPointParams.FilterType = Enum.RaycastFilterType.Include
 QueryPointParams.IgnoreWater = true
 
 function QueryPoint(Origin: Vector3, UnitDirection: Vector3, Distance: number, LastPosition: Vector3?)
-	Distance = Distance + NearPlaneZ
+	Distance = Distance + NearPlaneZ -- We need to offset the distance by the near plane Z to get the actual distance from the camera
 	local Target = Origin + UnitDirection * Distance
 
 	local SoftLimit = inf
@@ -129,6 +131,8 @@ end
 
 --// Query Viewport //--
 
+-- Query all viewport corners in world space and return the strictest soft limit and hard limit
+
 function QueryViewport(Focus: CFrame, Distance: number)
 	local FP = Focus.Position
 	local FX = Focus.RightVector
@@ -147,8 +151,8 @@ function QueryViewport(Focus: CFrame, Distance: number)
 		for ViewY = 0, 1 do
 			local worldY = FY * ((ViewY - 0.5) * ProjY)
 
-			local Origin = FP + NearPlaneZ * (WorldX + worldY)
-			local LastPosition = CurrentCamera:ViewportPointToRay(ViewportSize.X * ViewX, ViewportSize.Y * ViewY).Origin
+			local Origin = FP + NearPlaneZ * (WorldX + worldY) -- Viewport Corner in world space (4 total corners)
+			local LastPosition = CurrentCamera:ViewportPointToRay(ViewportSize.X * ViewX, ViewportSize.Y * ViewY).Origin -- Get the Corner's world space position at the previous frame
 
 			local SoftPointLimit, HardPointLimit = QueryPoint(Origin, FZ, Distance, LastPosition)
 
@@ -185,6 +189,10 @@ function TestPromotion(
 	local FY = Focus.UpVector
 	local FZ = -Focus.LookVector
 
+	if true then
+		return true
+	end
+
 	-- Dead reckoning the camera rotation and focus
 
 	local SampleDT = 0.0625
@@ -210,6 +218,8 @@ function TestPromotion(
 			return false
 		end
 	end
+
+	-- Promote the soft limit to a hard limit
 
 	return true
 end

@@ -135,7 +135,8 @@ function TransformExtrapolator:Step(
 	local LastRot = ExtractRotation(LastCFrame)
 
 	-- Estimate velocities from the delta between now and the last frame
-	-- This estimation can be a little noisy.
+	-- This estimation can be a little noisy
+
 	local DP = (CurrentPos - LastPos) / DT
 	local DR = CFrameToAxis(CurrentRot * LastRot:Inverse()) / DT
 
@@ -158,7 +159,12 @@ end
 
 --// ShiftUnlocked Camera //--
 
-function GetProperCorrection(LastCorrection: number, DT: number, ChangePerSec: number, CurrentCorrection: number): number
+function GetProperCorrection(
+	LastCorrection: number,
+	DT: number,
+	ChangePerSec: number,
+	CurrentCorrection: number
+): number
 	if LastCorrection == CurrentCorrection then
 		-- no action needed:
 		return LastCorrection
@@ -260,14 +266,14 @@ function SUCamera.new(): SUCamera
 	-- Occlusion
 
 	self._LastDistanceFromRoot = 0
-	self._LastCorrectionX = 0 
+	self._LastCorrectionX = 0
 	self._LastCorrectionZ = 0
 	self._LastCorrectionOcclusion = 0
 
 	-- Gamepad Variables
 
 	self._GamepadPan = Vector2.new(0, 0)
-	self._LastThumbstickTime = 0 
+	self._LastThumbstickTime = 0
 	self._LastThumbstickPos = Vector2.new(0, 0)
 	self._CurrentGamepadSpeed = 0
 	self._LastGamepadVelocity = Vector2.new(0, 0)
@@ -397,10 +403,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel -- I love typechecking
 
-		if
-			self.AutoExcludeChars == true
-			and RaycastChannel.RayParams.FilterType == Enum.RaycastFilterType.Exclude
-		then
+		if self.AutoExcludeChars == true and RaycastChannel.RayParams.FilterType == Enum.RaycastFilterType.Exclude then
 			local function CharacterAdded(Character)
 				RaycastChannel:AppendToFDI(Character)
 			end
@@ -493,7 +496,7 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	local CollisionRadius = self._CollisionRadius
 
-	local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel 
+	local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel
 
 	local RootPartPos = self._CurrentRootPart.CFrame.Position
 	local RootPartUnrotatedCFrame = CFrame.new(RootPartPos)
@@ -520,7 +523,12 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = GetProperCorrection(self._LastCorrectionX,DT,CorrectionReversionSpeed,(HitPosition - CurrentCFrame.Position).Magnitude)
+		local Correction = GetProperCorrection(
+			self._LastCorrectionX,
+			DT,
+			CorrectionReversionSpeed,
+			(HitPosition - CurrentCFrame.Position).Magnitude
+		)
 
 		self._LastCorrectionX = Correction
 
@@ -529,7 +537,7 @@ function SUCamera._Update(self: SUCamera, DT)
 		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction)
 		CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
 	elseif self._LastCorrectionX ~= 0 then
-		local Correction = GetProperCorrection(self._LastCorrectionX,DT,CorrectionReversionSpeed,0)
+		local Correction = GetProperCorrection(self._LastCorrectionX, DT, CorrectionReversionSpeed, 0)
 
 		self._LastCorrectionX = Correction
 
@@ -556,23 +564,26 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = GetProperCorrection(self._LastCorrectionZ,DT,CorrectionReversionSpeed,(HitPosition - CFrameWithPitchAndYOffset.Position).Magnitude)
+		local Correction = GetProperCorrection(
+			self._LastCorrectionZ,
+			DT,
+			CorrectionReversionSpeed,
+			(HitPosition - CFrameWithPitchAndYOffset.Position).Magnitude
+		)
 
 		self._LastCorrectionZ = Correction
 
 		-- Update to reflect correction
 
-		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset
-			+ (-VecToFocus.Unit * Correction)
+		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset + (-VecToFocus.Unit * Correction)
 	elseif self._LastCorrectionZ ~= 0 then
-		local Correction = GetProperCorrection(self._LastCorrectionZ,DT,CorrectionReversionSpeed,0)
+		local Correction = GetProperCorrection(self._LastCorrectionZ, DT, CorrectionReversionSpeed, 0)
 
 		self._LastCorrectionZ = Correction
 
 		-- Update to reflect correction
 
-		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset
-			+ (-VecToFocus.Unit * Correction)
+		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset + (-VecToFocus.Unit * Correction)
 	end
 
 	-- Calculate Final Desired CFrame for camera with focus corrections
@@ -585,24 +596,20 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	local Focus = RootPartUnrotatedCFrame * CameraPitchYawRotationAndXYOffset
 
-	-- Rotate CameraCFrame to face the opposite direction of the camera
-
-	local RotatedFocus = CFrame.new(Focus.Position, CurrentCFrame.Position)
-		* CFrame.new(0, 0, 0, -1, 0, 0, 0, 1, 0, 0, 0, -1)
-
 	-- Get extrapolation result
 
-	local ExtrapolationResult = self._TransformExtrapolator:Step(DT, RotatedFocus)
+	local ExtrapolationResult = self._TransformExtrapolator:Step(DT, Focus)
 
 	-- Get Popper Distance
 
 	local Distance = (CurrentCFrame.Position - Focus.Position).Magnitude
 
-	local PopperResult = Popper.GetDistance(RotatedFocus, Distance, ExtrapolationResult)
+	local PopperResult = Popper.GetDistance(Focus, Distance, ExtrapolationResult)
 
 	-- Handle occlusion
 
-	local Correction = GetProperCorrection(self._LastCorrectionOcclusion,DT,CorrectionReversionSpeed * 3,Distance - PopperResult)
+	local Correction =
+		GetProperCorrection(self._LastCorrectionOcclusion, DT, CorrectionReversionSpeed * 3, Distance - PopperResult)
 	self._LastCorrectionOcclusion = Correction
 	local CorrectionUnit = CurrentCFrame.LookVector.Unit
 	CurrentCFrame = CurrentCFrame + (CorrectionUnit * Correction)
@@ -850,7 +857,7 @@ function SUCamera._HandleCharacterTrasparency(self: SUCamera)
 	local Character = CurrentHumanoid.Parent :: Model
 
 	local Distance = (self._CurrentCFrame.Position :: Vector3 - CurrentRootPart.Position).Magnitude
-	
+
 	if Distance <= self.ObstructionRange then
 		local ModifierValue = math.max(0.5, 1.1 - (Distance / self.ObstructionRange))
 
