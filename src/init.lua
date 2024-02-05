@@ -79,84 +79,6 @@ local function GamepadLinearToCurve(ThumbstickPosition)
 	)
 end
 
---// Transform Extrapolator //--
-
-local IdentityCFrame = CFrame.new()
-
-local function CFrameToAxis(CFrame: CFrame): Vector3
-	local Axis: Vector3, Angle: number = CFrame:ToAxisAngle()
-	return Axis * Angle
-end
-
-local function AxisToCFrame(Axis: Vector3): CFrame
-	local Angle: number = Axis.Magnitude
-
-	if Angle > 1e-5 then
-		return CFrame.fromAxisAngle(Axis, Angle)
-	end
-
-	return IdentityCFrame
-end
-
-local function ExtractRotation(CF: CFrame): CFrame
-	local _, _, _, xx, yx, zx, xy, yy, zy, xz, yz, zz = CF:GetComponents()
-	return CFrame.new(0, 0, 0, xx, yx, zx, xy, yy, zy, xz, yz, zz)
-end
-
-local TransformExtrapolator = {}
-TransformExtrapolator.__index = TransformExtrapolator
-
-type TransformExtrapolatorProperties = {
-	LastFrame: CFrame?,
-}
-
-type TransformExtrapolator = typeof(setmetatable({} :: TransformExtrapolatorProperties, TransformExtrapolator))
-
-function TransformExtrapolator.new(): TransformExtrapolator
-	return setmetatable(
-		{
-			LastCFrame = nil,
-		} :: TransformExtrapolatorProperties,
-		TransformExtrapolator
-	)
-end
-
-function TransformExtrapolator:Step(
-	DT: number,
-	CurrentCFrame: CFrame
-): { Extrapolate: (number) -> CFrame, PosVelocity: Vector3, RotVelocity: Vector3 }
-	local LastCFrame = self.lastCFrame or CurrentCFrame
-	self.LastCFrame = CurrentCFrame
-
-	local CurrentPos = CurrentCFrame.Position
-	local CurrentRot = ExtractRotation(CurrentCFrame)
-
-	local LastPos = LastCFrame.Position
-	local LastRot = ExtractRotation(LastCFrame)
-
-	-- Estimate velocities from the delta between now and the last frame
-	-- This estimation can be a little noisy
-
-	local DP = (CurrentPos - LastPos) / DT
-	local DR = CFrameToAxis(CurrentRot * LastRot:Inverse()) / DT
-
-	local function Extrapolate(t: number) -- get CFrame in the future t time
-		local P = DP * t + CurrentPos
-		local R = AxisToCFrame(DR * t) * CurrentRot
-		return R + P
-	end
-
-	return {
-		Extrapolate = Extrapolate,
-		PosVelocity = DP,
-		RotVelocity = DR,
-	}
-end
-
-function TransformExtrapolator:Reset()
-	self.LastCFrame = nil
-end
-
 --// ShiftUnlocked Camera //--
 
 function GetProperCorrection(
@@ -222,7 +144,6 @@ type SUCameraProperties = {
 	_LastCorrectionZ: number,
 	_LastCorrectionOcclusion: number,
 	_CollisionRadius: number,
-	_TransformExtrapolator: TransformExtrapolator,
 	RotateCharacter: boolean,
 	PopOutSpeed: number,
 	VelocityOffset: boolean,
@@ -281,7 +202,6 @@ function SUCamera.new(): SUCamera
 	-- DataModel refrences
 
 	self._Janitor = JanitorModule.new()
-	self._TransformExtrapolator = TransformExtrapolator.new()
 	self._CurrentRootPart = nil
 	self._CurrentHumanoid = nil
 	self._CurrentCamera = nil
@@ -447,10 +367,6 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			self._CurrentCamera.CameraType = Enum.CameraType.Custom
 		end
 
-		-- Reset Transform Extrapolator to avoid velocity spikes
-
-		self._TransformExtrapolator:Reset()
-
 		-- Reset Camera State Variables
 
 		self._Pitch = 0
@@ -596,15 +512,11 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	local Focus = RootPartUnrotatedCFrame * CameraPitchYawRotationAndXYOffset
 
-	-- Get extrapolation result
-
-	local ExtrapolationResult = self._TransformExtrapolator:Step(DT, Focus)
-
 	-- Get Popper Distance
 
 	local Distance = (CurrentCFrame.Position - Focus.Position).Magnitude
 
-	local PopperResult = Popper.GetDistance(Focus, Distance, ExtrapolationResult)
+	local PopperResult = Popper.GetDistance(Focus, Distance)
 
 	-- Handle occlusion
 
