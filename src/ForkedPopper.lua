@@ -115,13 +115,13 @@ function QueryPoint(Origin: Vector3, UnitDirection: Vector3, Distance: number, L
 			end
 
 			if Promote then
-				-- Ostensibly a soft limit, but the camera has passed through it in the last frame, so promote to a hard limit.
+				-- Ostensibly a soft limit, but the camera has passed through it in the last frame, so promote to a hard limit
 				HardLimit = Limit
 			elseif Distance < SoftLimit then
 				SoftLimit = Limit
 			end
 		else
-			-- Trivial hard limit
+			-- Trivial hard limit, player probably would not notice clipping. Near plane is inside the object
 			HardLimit = Limit
 		end
 	end
