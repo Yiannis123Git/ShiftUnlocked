@@ -8,9 +8,9 @@
 /\__/ / | | | | | | |_| |_| | | | | | (_) | (__|   <  __/ (_| |
 \____/|_| |_|_|_|  \__|\___/|_| |_|_|\___/ \___|_|\_\___|\__,_|
                                                                                                                                   
-       -- A Third-Person Camera for the Roblox Engine --     
-  -- made by Yiannis123 credit would be appreciated if used -- 
-   -- Based on ShoulderCam Roblox module and Roblox Source -- 
+         -- A Third-Person Camera for the Roblox Engine --     
+    -- made by Yiannis123 credit would be appreciated if used -- 
+-- Based on ShoulderCam Roblox module and Roblox PlayerModule Source -- 
 ]]
 
 --// Services
@@ -23,6 +23,7 @@ local Players = game:GetService("Players")
 local JanitorModule = require(script.Parent.janitor)
 local SmartRaycast = require(script.Parent.smartraycast)
 local Popper = require(script.ForkedPopper)
+local ConstrainedSpring = require(script.ConstrainedSpring)
 
 --// Variables
 local LocalPlayer = Players.LocalPlayer
@@ -148,6 +149,14 @@ type SUCameraProperties = {
 	PopOutSpeed: number,
 	VelocityOffset: boolean,
 	CorrectionReversionSpeed: number,
+	MaxZoom: number,
+	MinZoom: number,
+	ZoomLocked: boolean,
+	_ZoomSpring: ConstrainedSpring.ConstrainedSpring,
+	ZoomStiffness: number,
+	ZoomSpeed: number,
+	ZoomSensitivityCurvature: number,
+	_LastZoomValue: number,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -167,13 +176,19 @@ function SUCamera.new(): SUCamera
 	self.UnlockedIcon = nil
 	self.MouseRadsPerPixel = Vector2.new(0.00872664619, 0.00671951752) -- dont worry to much about this setting
 	self.GamepadSensitivityModifier = Vector2.new(0.85, 0.65)
-	self.CameraOffset = Vector3.new(1.75, 1.5, 10) -- Z Axis will be ingnored (legay value 1.75,1.5)
+	self.CameraOffset = Vector3.new(1.75, 1.5, 12.5) -- Starting Z axis or permanent one if zoom is locked (legay value 1.75,1.5)
 	self.RaycastChannel = nil
 	self.ObstructionRange = 6.5 -- Distance from the camera required to start making the local character transparent
 	self.PopOutSpeed = 10 -- sec
 	self.RotateCharacter = true
 	self.VelocityOffset = true
-	self.CorrectionReversionSpeed = 3
+	self.ZoomLocked = false
+	self.CorrectionReversionSpeed = 1
+	self.MaxZoom = 400
+	self.MinZoom = 2
+	self.ZoomStiffness = 4.5
+	self.ZoomSpeed = 1
+	self.ZoomSensitivityCurvature = 0.5
 
 	-- State Variables
 
@@ -190,6 +205,7 @@ function SUCamera.new(): SUCamera
 	self._LastCorrectionX = 0
 	self._LastCorrectionZ = 0
 	self._LastCorrectionOcclusion = 0
+	self._LastZoomValue = self.CameraOffset.Z
 
 	-- Gamepad Variables
 
@@ -202,6 +218,7 @@ function SUCamera.new(): SUCamera
 	-- DataModel refrences
 
 	self._Janitor = JanitorModule.new()
+	self._ZoomSpring = ConstrainedSpring.new(self.ZoomStiffness, self.CameraOffset.Z, self.MinZoom, self.MaxZoom)
 	self._CurrentRootPart = nil
 	self._CurrentHumanoid = nil
 	self._CurrentCamera = nil
@@ -294,6 +311,15 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			"Disconnect"
 		)
 
+		self._Janitor:Add(
+			UserInputService.PointerAction:Connect(
+				function(Wheel: number, Pan: Vector2, Pinch: number, GameProccessed: boolean)
+					self:_OnZoomInput(Wheel, Pan, Pinch, GameProccessed)
+				end
+			),
+			"Disconnect"
+		)
+
 		-- Connect Character Events
 
 		self._Janitor:Add(
@@ -348,6 +374,15 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		self:_OnCurrentCharacterChanged(LocalPlayer.Character)
 		self:_CurrentCameraChanged(workspace.CurrentCamera)
+
+		-- Init/Reset Zoom Spring
+
+		self._ZoomSpring.CurrentVelocity = 0
+		self._ZoomSpring.CurrentPos = self.CameraOffset.Z
+
+		-- Set _LastZoomValue to CameraOffset.Z
+
+		self._LastZoomValue = self.CameraOffset.Z
 	else
 		-- Unbind camera update function from render stepped
 
@@ -402,6 +437,11 @@ function SUCamera._Update(self: SUCamera, DT)
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 	end
 
+	-- Update ZoomSpring Limits
+
+	self._ZoomSpring.MinValue = self.MinZoom
+	self._ZoomSpring.MaxValue = self.MaxZoom
+
 	-- Set Camera FOV
 
 	self._CurrentCamera.FieldOfView = self.FOV
@@ -420,9 +460,15 @@ function SUCamera._Update(self: SUCamera, DT)
 	local YawRotation = CFrame.Angles(0, self._Yaw, 0)
 	local PitchRotation = CFrame.Angles(self._Pitch, 0, 0)
 
-	local XOffset = CFrame.new(self.CameraOffset.X, 0, 0)
-	local YOffset = CFrame.new(0, self.CameraOffset.Y, 0)
-	local ZOffset = CFrame.new(0, 0, self.CameraOffset.Z)
+	local CameraOffset = Vector3.new(
+		self.CameraOffset.X,
+		self.CameraOffset.Y,
+		self.ZoomLocked == false and self._ZoomSpring:Step(DT) or self.CameraOffset.Z
+	)
+
+	local XOffset = CFrame.new(CameraOffset.X, 0, 0)
+	local YOffset = CFrame.new(0, CameraOffset.Y, 0)
+	local ZOffset = CFrame.new(0, 0, CameraOffset.Z)
 
 	local CameraYawRotationAndXOffset = YawRotation -- First rotate around the Y axis (look left/right)
 		* XOffset -- Then perform the desired offset (so camera is centered to side of player instead of directly on player)
@@ -520,8 +566,7 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	-- Handle occlusion
 
-	local Correction =
-		GetProperCorrection(self._LastCorrectionOcclusion, DT, CorrectionReversionSpeed * 3, Distance - PopperResult)
+	local Correction = Distance - PopperResult
 	self._LastCorrectionOcclusion = Correction
 	local CorrectionUnit = CurrentCFrame.LookVector.Unit
 	CurrentCFrame = CurrentCFrame + (CorrectionUnit * Correction)
@@ -703,6 +748,29 @@ function SUCamera._OnInputEnded(self: SUCamera, InputObject: InputObject, GamePr
 	if InputObject.KeyCode == Enum.KeyCode.Thumbstick2 then
 		self._GamepadPan = Vector2.new(0, 0)
 	end
+end
+
+function SUCamera._OnZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinch: number, GameProccessed: boolean)
+	if GameProccessed == true or self.ZoomLocked == true then
+		return
+	end
+
+	-- We replicate PlayerModule behavior
+
+	local ZoomDelta = (-Wheel + Pinch) * self.ZoomSpeed
+
+	local CurrentZoom = self._ZoomSpring.Goal
+	local NewZoom
+
+	if ZoomDelta > 0 then
+		NewZoom = CurrentZoom + ZoomDelta * (1 + CurrentZoom * self.ZoomSensitivityCurvature)
+	else
+		NewZoom = (CurrentZoom + ZoomDelta) / (1 - ZoomDelta * self.ZoomSensitivityCurvature)
+	end
+
+	NewZoom = math.clamp(NewZoom, self.MinZoom, self.MaxZoom)
+
+	self._ZoomSpring.Goal = NewZoom
 end
 
 --//  Character Removed/Added //--
