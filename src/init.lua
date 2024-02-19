@@ -125,6 +125,7 @@ type SUCameraProperties = {
 	VelocityOffset: boolean,
 	MaxZoom: number,
 	MinZoom: number,
+	StartZoom: number,
 	ZoomLocked: boolean,
 	_ZoomSpring: ConstrainedSpring.ConstrainedSpring,
 	ZoomStiffness: number,
@@ -149,12 +150,13 @@ function SUCamera.new(): SUCamera
 	self.UnlockedIcon = nil
 	self.MouseRadsPerPixel = Vector2.new(0.00872664619, 0.00671951752) -- dont worry to much about this setting
 	self.GamepadSensitivityModifier = Vector2.new(0.85, 0.65)
-	self.CameraOffset = Vector3.new(1.75, 1.5, 12.5) -- Starting Z axis or permanent one if zoom is locked (legay value 1.75,1.5)
+	self.CameraOffset = Vector3.new(1.75, 1.5, 0) -- (legay value 1.75,1.5,0)
 	self.RaycastChannel = nil
 	self.ObstructionRange = 6.5 -- Distance from the camera required to start making the local character transparent
 	self.RotateCharacter = true
 	self.VelocityOffset = true
 	self.ZoomLocked = false
+	self.StartZoom = 12.5
 	self.MaxZoom = 400
 	self.MinZoom = 2
 	self.ZoomStiffness = 4.5
@@ -185,7 +187,7 @@ function SUCamera.new(): SUCamera
 	-- DataModel refrences
 
 	self._Janitor = JanitorModule.new()
-	self._ZoomSpring = ConstrainedSpring.new(self.ZoomStiffness, self.CameraOffset.Z, self.MinZoom, self.MaxZoom)
+	self._ZoomSpring = ConstrainedSpring.new(self.ZoomStiffness, self.StartZoom, self.MinZoom, self.MaxZoom)
 	self._CurrentRootPart = nil
 	self._CurrentHumanoid = nil
 	self._CurrentCamera = nil
@@ -345,7 +347,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		-- Init/Reset Zoom Spring
 
 		self._ZoomSpring.CurrentVelocity = 0
-		self._ZoomSpring.CurrentPos = self.CameraOffset.Z
+		self._ZoomSpring.CurrentPos = self.StartZoom
 	else
 		-- Unbind camera update function from render stepped
 
@@ -411,21 +413,13 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	-- Initialize variables used for side correction, occlusion, and calculating camera focus/rotation
 
-	local CollisionRadius = self._CollisionRadius
-
-	local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel
-
 	local RootPartPos = self._CurrentRootPart.CFrame.Position
 	local RootPartUnrotatedCFrame = CFrame.new(RootPartPos)
 
 	local YawRotation = CFrame.Angles(0, self._Yaw, 0)
 	local PitchRotation = CFrame.Angles(self._Pitch, 0, 0)
 
-	local CameraOffset = Vector3.new(
-		self.CameraOffset.X,
-		self.CameraOffset.Y,
-		self.ZoomLocked == false and self._ZoomSpring:Step(DT) or self.CameraOffset.Z
-	)
+	local CameraOffset = Vector3.new(self.CameraOffset.X, self.CameraOffset.Y, self.CameraOffset.Z)
 
 	local XOffset = CFrame.new(CameraOffset.X, 0, 0)
 	local YOffset = CFrame.new(0, CameraOffset.Y, 0)
@@ -434,91 +428,58 @@ function SUCamera._Update(self: SUCamera, DT)
 	local CameraYawRotationAndXOffset = YawRotation -- First rotate around the Y axis (look left/right)
 		* XOffset -- Then perform the desired offset (so camera is centered to side of player instead of directly on player)
 
-	local CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
-
-	--// Handle/Calculate axis corrections (so focus doesn't does not clip through objects)
-
-	-- Right Vector correction
-
-	local VecToFocus = CurrentCFrame.Position - RootPartPos
-	local RaycastResult =
-		workspace:Raycast(RootPartPos, VecToFocus + (VecToFocus.Unit * CollisionRadius), RaycastChannel.RayParams)
-
-	if RaycastResult then
-		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = (HitPosition - CurrentCFrame.Position).Magnitude
-
-		-- Update to reflect correction
-
-		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction)
-		CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
-	end
-
-	-- Y Vector correction for pitch and Y offset
-
 	local CameraPitchRotationAndYOffset = PitchRotation * YOffset
+
 	local CameraPitchYawRotationAndXYOffset = CameraYawRotationAndXOffset * CameraPitchRotationAndYOffset
 
-	local CFrameWithPitchAndYOffset = RootPartUnrotatedCFrame -- desired new focus
-		* CameraPitchYawRotationAndXYOffset
+	local Focus = RootPartUnrotatedCFrame * (CameraPitchYawRotationAndXYOffset * ZOffset)
 
-	local YOffsetGoal =
-		Vector3.new(CurrentCFrame.Position.X, CFrameWithPitchAndYOffset.Position.Y, CurrentCFrame.Position.Z)
+	--// FOCUS CORRECTIONS (Order is important)
 
-	VecToFocus = YOffsetGoal - CurrentCFrame.Position
+	local Goal
+	local Origin
+	local VecToFocus
 
-	RaycastResult = workspace:Raycast(
-		CurrentCFrame.Position,
-		VecToFocus + (VecToFocus.Unit * CollisionRadius),
-		RaycastChannel.RayParams
-	)
+	-- Y axis correction
 
-	if RaycastResult then
-		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = (HitPosition - YOffsetGoal).Magnitude
+	Origin = RootPartPos
+	Goal = Vector3.new(RootPartPos.X, Focus.Position.Y, RootPartPos.Z)
+	VecToFocus = Goal - RootPartPos
 
-		-- Update to reflect correction
+	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus)
 
-		CFrameWithPitchAndYOffset = CFrameWithPitchAndYOffset + (-VecToFocus.Unit * Correction)
-	end
+	-- X axis correction
 
-	-- Z Vector correction for pitch and Y offset
+	Origin = Vector3.new(RootPartPos.X, Focus.Position.Y, RootPartPos.Z)
+	Goal = Vector3.new(Focus.Position.X, Focus.Position.Y, RootPartPos.Z)
+	VecToFocus = Goal - Origin
 
-	local AnchorPoint =
-		Vector3.new(CurrentCFrame.Position.X, CFrameWithPitchAndYOffset.Position.Y, CurrentCFrame.Position.Z)
+	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus)
 
-	VecToFocus = CFrameWithPitchAndYOffset.Position - AnchorPoint
-	RaycastResult =
-		workspace:Raycast(AnchorPoint, VecToFocus + (VecToFocus.Unit * CollisionRadius), RaycastChannel.RayParams)
+	-- Z axis correction
 
-	if RaycastResult then
-		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = (HitPosition - CFrameWithPitchAndYOffset.Position).Magnitude
+	Origin = Vector3.new(Focus.Position.X, Focus.Position.Y, RootPartPos.Z)
+	Goal = Vector3.new(Focus.Position.X, Focus.Position.Y, Focus.Position.Z)
+	VecToFocus = Goal - Origin
 
-		-- Update to reflect correction
-
-		CFrameWithPitchAndYOffset = CFrameWithPitchAndYOffset + (-VecToFocus.Unit * Correction)
-	end
-
-	-- Calculate Final Desired CFrame for camera with focus corrections
-
-	CurrentCFrame = CFrameWithPitchAndYOffset * ZOffset
+	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus)
 
 	--// OCCLUSION
 
-	local Focus = CFrameWithPitchAndYOffset
+	local Zoom = self.ZoomLocked and 0 or self._ZoomSpring:Step(DT)
+	local DesiredCameraCFrame = Focus * CFrame.new(0, 0, Zoom)
 
 	-- Get Popper Distance
 
-	local Distance = (CurrentCFrame.Position - Focus.Position).Magnitude
+	local Distance = (DesiredCameraCFrame.Position - Focus.Position).Magnitude
 
 	local PopperResult = Popper.GetDistance(Focus, Distance)
 
 	-- Handle occlusion
 
 	local Correction = Distance - PopperResult
-	local CorrectionUnit = CurrentCFrame.LookVector.Unit
-	CurrentCFrame = CurrentCFrame + (CorrectionUnit * Correction)
+	local CorrectionUnit = DesiredCameraCFrame.LookVector.Unit
+	local CurrentCFrame = DesiredCameraCFrame + (CorrectionUnit * Correction)
 
 	-- Set Current CFrame
 
@@ -558,6 +519,29 @@ function SUCamera._GetCollisionRadius(self: SUCamera)
 	local CornerPos = Vector3.new(ImageWidth, ImageHeight, self._CurrentCamera.NearPlaneZ)
 
 	return CornerPos.Magnitude
+end
+
+function SUCamera._ApplyCorrectionForAxis(
+	self: SUCamera,
+	Focus: CFrame,
+	Origin: Vector3,
+	Goal: Vector3,
+	VecToFocus: Vector3
+): CFrame
+	local RaycastResult = workspace:Raycast(
+		Origin,
+		VecToFocus + (VecToFocus.Unit * self._CollisionRadius),
+		(self.RaycastChannel :: SmartRaycast.Channel).RayParams
+	)
+
+	if RaycastResult then
+		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * self._CollisionRadius)
+		local Correction = (HitPosition - Goal).Magnitude
+
+		return Focus + (-VecToFocus.Unit * Correction)
+	end
+
+	return Focus
 end
 
 local ControllableStates = {
