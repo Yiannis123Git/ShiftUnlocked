@@ -82,27 +82,6 @@ end
 
 --// ShiftUnlocked Camera //--
 
-function GetProperCorrection(
-	LastCorrection: number,
-	DT: number,
-	ChangePerSec: number,
-	CurrentCorrection: number
-): number
-	if LastCorrection == CurrentCorrection then
-		-- no action needed:
-		return LastCorrection
-	end
-
-	if CurrentCorrection > LastCorrection then
-		-- we need to ensure proper occlusion:
-		return CurrentCorrection
-	end
-
-	-- tween torwards the desired value
-
-	return math.max(CurrentCorrection, LastCorrection - (ChangePerSec * DT))
-end
-
 --[=[
 	The ShiftUnlocked Camera 
 
@@ -141,14 +120,9 @@ type SUCameraProperties = {
 	_CurrentCFrame: CFrame,
 	ObstructionRange: number,
 	_LastDistanceFromRoot: number,
-	_LastCorrectionX: number,
-	_LastCorrectionZ: number,
-	_LastCorrectionOcclusion: number,
 	_CollisionRadius: number,
 	RotateCharacter: boolean,
-	PopOutSpeed: number,
 	VelocityOffset: boolean,
-	CorrectionReversionSpeed: number,
 	MaxZoom: number,
 	MinZoom: number,
 	ZoomLocked: boolean,
@@ -156,7 +130,6 @@ type SUCameraProperties = {
 	ZoomStiffness: number,
 	ZoomSpeed: number,
 	ZoomSensitivityCurvature: number,
-	_LastZoomValue: number,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -179,11 +152,9 @@ function SUCamera.new(): SUCamera
 	self.CameraOffset = Vector3.new(1.75, 1.5, 12.5) -- Starting Z axis or permanent one if zoom is locked (legay value 1.75,1.5)
 	self.RaycastChannel = nil
 	self.ObstructionRange = 6.5 -- Distance from the camera required to start making the local character transparent
-	self.PopOutSpeed = 10 -- sec
 	self.RotateCharacter = true
 	self.VelocityOffset = true
 	self.ZoomLocked = false
-	self.CorrectionReversionSpeed = 1
 	self.MaxZoom = 400
 	self.MinZoom = 2
 	self.ZoomStiffness = 4.5
@@ -202,10 +173,6 @@ function SUCamera.new(): SUCamera
 	-- Occlusion
 
 	self._LastDistanceFromRoot = 0
-	self._LastCorrectionX = 0
-	self._LastCorrectionZ = 0
-	self._LastCorrectionOcclusion = 0
-	self._LastZoomValue = self.CameraOffset.Z
 
 	-- Gamepad Variables
 
@@ -379,10 +346,6 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		self._ZoomSpring.CurrentVelocity = 0
 		self._ZoomSpring.CurrentPos = self.CameraOffset.Z
-
-		-- Set _LastZoomValue to CameraOffset.Z
-
-		self._LastZoomValue = self.CameraOffset.Z
 	else
 		-- Unbind camera update function from render stepped
 
@@ -448,8 +411,6 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	-- Initialize variables used for side correction, occlusion, and calculating camera focus/rotation
 
-	local CorrectionReversionSpeed = self.CorrectionReversionSpeed
-
 	local CollisionRadius = self._CollisionRadius
 
 	local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel
@@ -475,7 +436,7 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	local CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
 
-	--// Handle/Calculate side correction when player is adjacent to a wall (so focus doesn't go in the wall)
+	--// Handle/Calculate axis corrections (so focus doesn't does not clip through objects)
 
 	-- Right Vector correction
 
@@ -485,23 +446,7 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = GetProperCorrection(
-			self._LastCorrectionX,
-			DT,
-			CorrectionReversionSpeed,
-			(HitPosition - CurrentCFrame.Position).Magnitude
-		)
-
-		self._LastCorrectionX = Correction
-
-		-- Update to reflect correction
-
-		CameraYawRotationAndXOffset = CameraYawRotationAndXOffset + (-VecToFocus.Unit * Correction)
-		CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
-	elseif self._LastCorrectionX ~= 0 then
-		local Correction = GetProperCorrection(self._LastCorrectionX, DT, CorrectionReversionSpeed, 0)
-
-		self._LastCorrectionX = Correction
+		local Correction = (HitPosition - CurrentCFrame.Position).Magnitude
 
 		-- Update to reflect correction
 
@@ -509,13 +454,35 @@ function SUCamera._Update(self: SUCamera, DT)
 		CurrentCFrame = RootPartUnrotatedCFrame * CameraYawRotationAndXOffset
 	end
 
-	-- Z Vector correction
+	-- Y Vector correction for pitch and Y offset
 
 	local CameraPitchRotationAndYOffset = PitchRotation * YOffset
 	local CameraPitchYawRotationAndXYOffset = CameraYawRotationAndXOffset * CameraPitchRotationAndYOffset
 
-	local CFrameWithPitchAndYOffset = RootPartUnrotatedCFrame -- Aka desired focus
-		* (CameraYawRotationAndXOffset * CameraPitchRotationAndYOffset)
+	local CFrameWithPitchAndYOffset = RootPartUnrotatedCFrame -- desired new focus
+		* CameraPitchYawRotationAndXYOffset
+
+	local YOffsetGoal =
+		Vector3.new(CurrentCFrame.Position.X, CFrameWithPitchAndYOffset.Position.Y, CurrentCFrame.Position.Z)
+
+	VecToFocus = YOffsetGoal - CurrentCFrame.Position
+
+	RaycastResult = workspace:Raycast(
+		CurrentCFrame.Position,
+		VecToFocus + (VecToFocus.Unit * CollisionRadius),
+		RaycastChannel.RayParams
+	)
+
+	if RaycastResult then
+		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
+		local Correction = (HitPosition - YOffsetGoal).Magnitude
+
+		-- Update to reflect correction
+
+		CFrameWithPitchAndYOffset = CFrameWithPitchAndYOffset + (-VecToFocus.Unit * Correction)
+	end
+
+	-- Z Vector correction for pitch and Y offset
 
 	local AnchorPoint =
 		Vector3.new(CurrentCFrame.Position.X, CFrameWithPitchAndYOffset.Position.Y, CurrentCFrame.Position.Z)
@@ -526,37 +493,20 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * CollisionRadius)
-		local Correction = GetProperCorrection(
-			self._LastCorrectionZ,
-			DT,
-			CorrectionReversionSpeed,
-			(HitPosition - CFrameWithPitchAndYOffset.Position).Magnitude
-		)
-
-		self._LastCorrectionZ = Correction
+		local Correction = (HitPosition - CFrameWithPitchAndYOffset.Position).Magnitude
 
 		-- Update to reflect correction
 
-		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset + (-VecToFocus.Unit * Correction)
-	elseif self._LastCorrectionZ ~= 0 then
-		local Correction = GetProperCorrection(self._LastCorrectionZ, DT, CorrectionReversionSpeed, 0)
-
-		self._LastCorrectionZ = Correction
-
-		-- Update to reflect correction
-
-		CameraPitchYawRotationAndXYOffset = CameraPitchYawRotationAndXYOffset + (-VecToFocus.Unit * Correction)
+		CFrameWithPitchAndYOffset = CFrameWithPitchAndYOffset + (-VecToFocus.Unit * Correction)
 	end
 
 	-- Calculate Final Desired CFrame for camera with focus corrections
 
-	local CameraCFrameInSubjectSpace = CameraPitchYawRotationAndXYOffset * ZOffset -- move camera back
-
-	CurrentCFrame = RootPartUnrotatedCFrame * CameraCFrameInSubjectSpace
+	CurrentCFrame = CFrameWithPitchAndYOffset * ZOffset
 
 	--// OCCLUSION
 
-	local Focus = RootPartUnrotatedCFrame * CameraPitchYawRotationAndXYOffset
+	local Focus = CFrameWithPitchAndYOffset
 
 	-- Get Popper Distance
 
@@ -567,7 +517,6 @@ function SUCamera._Update(self: SUCamera, DT)
 	-- Handle occlusion
 
 	local Correction = Distance - PopperResult
-	self._LastCorrectionOcclusion = Correction
 	local CorrectionUnit = CurrentCFrame.LookVector.Unit
 	CurrentCFrame = CurrentCFrame + (CorrectionUnit * Correction)
 
