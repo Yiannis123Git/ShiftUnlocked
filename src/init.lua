@@ -13,6 +13,8 @@
 -- Based on ShoulderCam Roblox module and Roblox PlayerModule Source -- 
 ]]
 
+debug.setmemorycategory("SUCamera")
+
 --// Services
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -131,6 +133,33 @@ type SUCameraProperties = {
 	ZoomStiffness: number,
 	ZoomSpeed: number,
 	ZoomSensitivityCurvature: number,
+	TimeUntilCorrectionReversion: number,
+	CorrectionReversionSpeed: number,
+	_YAxisCorrectionValues: {
+		LastCorrectionReturned: number,
+		LastMangitude: number,
+		Time0Preserved: number,
+		LastCorrection: number,
+	},
+	_XAxisCorrectionValues: {
+		LastCorrectionReturned: number,
+		LastMangitude: number,
+		Time0Preserved: number,
+		LastCorrection: number,
+	},
+	_ZAxisCorrectionValues: {
+		LastCorrectionReturned: number,
+		LastMangitude: number,
+		Time0Preserved: number,
+		LastCorrection: number,
+	},
+	_ZoomCorrectionValues: {
+		LastCorrectionReturned: number,
+		LastMangitude: number,
+		Time0Preserved: number,
+		LastCorrection: number,
+	},
+	CorrectionReversion: boolean,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -162,6 +191,9 @@ function SUCamera.new(): SUCamera
 	self.ZoomStiffness = 4.5
 	self.ZoomSpeed = 1
 	self.ZoomSensitivityCurvature = 0.5
+	self.TimeUntilCorrectionReversion = 0.8
+	self.CorrectionReversionSpeed = 2.5
+	self.CorrectionReversion = true
 
 	-- State Variables
 
@@ -172,9 +204,17 @@ function SUCamera.new(): SUCamera
 	self._CurrentCFrame = CFrame.new()
 	self._CollisionRadius = self:_GetCollisionRadius()
 
-	-- Occlusion
+	-- Occlusion / Focus Collision
 
 	self._LastDistanceFromRoot = 0
+	self._YAxisCorrectionValues =
+		{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
+	self._XAxisCorrectionValues =
+		{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
+	self._ZAxisCorrectionValues =
+		{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
+	self._ZoomCorrectionValues =
+		{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 
 	-- Gamepad Variables
 
@@ -375,6 +415,14 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._LastThumbstickPos = Vector2.new(0, 0)
 		self._CurrentGamepadSpeed = 0
 		self._LastGamepadVelocity = Vector2.new(0, 0)
+		self._YAxisCorrectionValues =
+			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
+		self._XAxisCorrectionValues =
+			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
+		self._ZAxisCorrectionValues =
+			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
+		self._ZoomCorrectionValues =
+			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 	end
 
 	self._Enabled = Enabled -- Might cause method to be droped if code yields for to long
@@ -419,6 +467,8 @@ function SUCamera._Update(self: SUCamera, DT)
 	local YawRotation = CFrame.Angles(0, self._Yaw, 0)
 	local PitchRotation = CFrame.Angles(self._Pitch, 0, 0)
 
+	local RootPartCFrameWithYawRotation = RootPartUnrotatedCFrame * YawRotation
+
 	local CameraOffset = Vector3.new(self.CameraOffset.X, self.CameraOffset.Y, self.CameraOffset.Z)
 
 	local XOffset = CFrame.new(CameraOffset.X, 0, 0)
@@ -436,6 +486,8 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	--// FOCUS CORRECTIONS (Order is important)
 
+	local LocalFocusOffsetFromRotatedRoot = RootPartCFrameWithYawRotation:ToObjectSpace(Focus)
+
 	local Goal
 	local Origin
 	local VecToFocus
@@ -446,23 +498,28 @@ function SUCamera._Update(self: SUCamera, DT)
 	Goal = Vector3.new(RootPartPos.X, Focus.Position.Y, RootPartPos.Z)
 	VecToFocus = Goal - RootPartPos
 
-	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus)
+	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus, DT, "_YAxisCorrectionValues")
 
 	-- X axis correction
 
+	local FocusOnlyXOffset = (RootPartCFrameWithYawRotation * CFrame.new(LocalFocusOffsetFromRotatedRoot.X, 0, 0)).Position
+
 	Origin = Vector3.new(RootPartPos.X, Focus.Position.Y, RootPartPos.Z)
-	Goal = Vector3.new(Focus.Position.X, Focus.Position.Y, RootPartPos.Z)
+	Goal = Vector3.new(FocusOnlyXOffset.X, Focus.Position.Y, FocusOnlyXOffset.Z)
 	VecToFocus = Goal - Origin
 
-	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus)
+	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus, DT, "_XAxisCorrectionValues")
 
 	-- Z axis correction
 
-	Origin = Vector3.new(Focus.Position.X, Focus.Position.Y, RootPartPos.Z)
-	Goal = Vector3.new(Focus.Position.X, Focus.Position.Y, Focus.Position.Z)
+	local FocusZAxisOffset = (RootPartCFrameWithYawRotation * CFrame.new(0, 0, LocalFocusOffsetFromRotatedRoot.Z)).Position
+		- RootPartCFrameWithYawRotation.Position
+
+	Origin = Focus.Position - FocusZAxisOffset
+	Goal = Focus.Position
 	VecToFocus = Goal - Origin
 
-	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus)
+	Focus = self:_ApplyCorrectionForAxis(Focus, Origin, Goal, VecToFocus, DT, "_ZAxisCorrectionValues")
 
 	--// OCCLUSION
 
@@ -497,7 +554,7 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	if self:_IsHumanoidControllable() == true and self.RotateCharacter == true then
 		self._CurrentHumanoid.AutoRotate = false
-		self._CurrentRootPart.CFrame = CFrame.Angles(0, self._Yaw, 0) + self._CurrentRootPart.Position :: Vector3 -- Rotate character to be upright and facing the same direction as camera
+		self._CurrentRootPart.CFrame = YawRotation + self._CurrentRootPart.Position -- Rotate character to be upright and facing the same direction as camera
 	end
 
 	self:_HandleCharacterTrasparency()
@@ -521,12 +578,62 @@ function SUCamera._GetCollisionRadius(self: SUCamera)
 	return CornerPos.Magnitude
 end
 
+function SUCamera._GetProperCorrection(
+	self: SUCamera,
+	DT: number,
+	CurrentCorrection: number,
+	CurrentMagnitude: number,
+	AxisTableKey: string
+): number
+	local LastCorrectionReturned = self[AxisTableKey].LastCorrectionReturned
+	local LastMangitude = self[AxisTableKey].LastMangitude
+	local LastCorrection = self[AxisTableKey].LastCorrection
+
+	-- Update Time0Preserved
+
+	if LastCorrection == 0 and CurrentCorrection == 0 then
+		self[AxisTableKey].Time0Preserved += DT
+	else
+		self[AxisTableKey].Time0Preserved = 0
+	end
+
+	local Time0Preserved = self[AxisTableKey].Time0Preserved
+
+	-- Check if last correction has to be adjusted (caused by changes in camera offset)
+
+	if LastMangitude > CurrentMagnitude then
+		local Diff = LastMangitude - CurrentMagnitude
+		LastCorrectionReturned -= Diff
+	end
+
+	local ToReturn
+
+	if self.CorrectionReversion == false then
+		ToReturn = CurrentCorrection
+	elseif Time0Preserved >= self.TimeUntilCorrectionReversion then
+		-- Apply gradual reversion:
+		ToReturn = math.max(0, LastCorrectionReturned - (CurrentMagnitude * DT * self.CorrectionReversionSpeed))
+	elseif CurrentCorrection > LastCorrectionReturned then
+		ToReturn = CurrentCorrection
+	else
+		ToReturn = LastCorrectionReturned
+	end
+
+	self[AxisTableKey].LastCorrectionReturned = ToReturn
+	self[AxisTableKey].LastMangitude = CurrentMagnitude
+	self[AxisTableKey].LastCorrection = CurrentCorrection
+
+	return ToReturn
+end
+
 function SUCamera._ApplyCorrectionForAxis(
 	self: SUCamera,
 	Focus: CFrame,
 	Origin: Vector3,
 	Goal: Vector3,
-	VecToFocus: Vector3
+	VecToFocus: Vector3,
+	DT: number,
+	AxisTableKey: string
 ): CFrame
 	local RaycastResult = workspace:Raycast(
 		Origin,
@@ -534,14 +641,18 @@ function SUCamera._ApplyCorrectionForAxis(
 		(self.RaycastChannel :: SmartRaycast.Channel).RayParams
 	)
 
+	local Correction
+
 	if RaycastResult then
 		local HitPosition = RaycastResult.Position + (RaycastResult.Normal * self._CollisionRadius)
-		local Correction = (HitPosition - Goal).Magnitude
-
-		return Focus + (-VecToFocus.Unit * Correction)
+		Correction = self:_GetProperCorrection(DT, (HitPosition - Goal).Magnitude, VecToFocus.Magnitude, AxisTableKey)
+	else
+		Correction = self:_GetProperCorrection(DT, 0, VecToFocus.Magnitude, AxisTableKey)
 	end
 
-	return Focus
+	--print(AxisTableKey, Correction)
+
+	return Focus + (-VecToFocus.Unit * Correction)
 end
 
 local ControllableStates = {
