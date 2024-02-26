@@ -160,6 +160,8 @@ type SUCameraProperties = {
 		LastCorrection: number,
 	},
 	CorrectionReversion: boolean,
+	_ZoomState: string,
+	_CurrentPopperZoom: number,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -203,6 +205,7 @@ function SUCamera.new(): SUCamera
 	self._MouseLocked = true
 	self._CurrentCFrame = CFrame.new()
 	self._CollisionRadius = self:_GetCollisionRadius()
+	self._ZoomState = "Neutral"
 
 	-- Occlusion / Focus Collision
 
@@ -215,6 +218,7 @@ function SUCamera.new(): SUCamera
 		{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 	self._ZoomCorrectionValues =
 		{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
+	self._CurrentPopperZoom = self.StartZoom
 
 	-- Gamepad Variables
 
@@ -387,6 +391,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		-- Make transition to custom camera smooth by facing in same direction as previous camera
 
 		local CameraLook = (self._CurrentCamera :: Camera).CFrame.LookVector
+
 		self._Yaw = math.atan2(-CameraLook.X, -CameraLook.Z)
 		self._Pitch = math.asin(CameraLook.Y)
 
@@ -421,6 +426,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._LastThumbstickPos = Vector2.new(0, 0)
 		self._CurrentGamepadSpeed = 0
 		self._LastGamepadVelocity = Vector2.new(0, 0)
+		self._ZoomState = "Neutral"
 		self._YAxisCorrectionValues =
 			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 		self._XAxisCorrectionValues =
@@ -429,6 +435,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 		self._ZoomCorrectionValues =
 			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
+		self._CurrentPopperZoom = self.StartZoom
 	end
 
 	self._Enabled = Enabled -- Might cause method to be droped if code yields for to long
@@ -532,15 +539,28 @@ function SUCamera._Update(self: SUCamera, DT)
 	local Zoom = self.ZoomLocked and 0 or self._ZoomSpring:Step(DT)
 	local DesiredCameraCFrame = Focus * CFrame.new(0, 0, Zoom)
 
+	-- Update ZoomState
+
+	if
+		(self._ZoomSpring.Goal == self._ZoomSpring.CurrentPos)
+		or math.abs(self._ZoomSpring.Goal - self._ZoomSpring.CurrentPos) < 0.0001
+	then
+		self._ZoomState = "Neutral"
+	elseif self._ZoomSpring.Goal > self._ZoomSpring.CurrentPos then
+		self._ZoomState = "ZoomingOut"
+	elseif self._ZoomSpring.Goal < self._ZoomSpring.CurrentPos then
+		self._ZoomState = "ZoomingIn"
+	end
+
 	-- Get Popper Distance
 
 	local Distance = (DesiredCameraCFrame.Position - Focus.Position).Magnitude
 
-	local PopperResult = Popper.GetDistance(Focus, Distance)
+	local PopperResult = Popper.GetDistance(Focus, Distance) -- Max Distance from Focus
 
 	-- Handle occlusion
 
-	local Correction = Distance - PopperResult
+	local Correction = self:_GetProperCorrection(DT, Distance - PopperResult, Distance, "_ZoomCorrectionValues")
 	local CorrectionUnit = DesiredCameraCFrame.LookVector.Unit
 	local CurrentCFrame = DesiredCameraCFrame + (CorrectionUnit * Correction)
 
@@ -555,6 +575,10 @@ function SUCamera._Update(self: SUCamera, DT)
 	-- Set Camera Focus
 
 	self._CurrentCamera.Focus = Focus
+
+	-- Update Current Popper Zoom property
+
+	self._CurrentPopperZoom = PopperResult
 
 	-- Apply Character Rotation to match Camera (if needed)
 
@@ -597,7 +621,9 @@ function SUCamera._GetProperCorrection(
 
 	-- Update Time0Preserved
 
-	if LastCorrection == 0 and CurrentCorrection == 0 then
+	if AxisTableKey == "_ZoomCorrectionValues" and CurrentCorrection == 0 and self._ZoomState == "ZoomingOut" then
+		self[AxisTableKey].Time0Preserved = self.TimeUntilCorrectionReversion
+	elseif LastCorrection == 0 and CurrentCorrection == 0 then
 		self[AxisTableKey].Time0Preserved += DT
 	else
 		self[AxisTableKey].Time0Preserved = 0
@@ -610,15 +636,24 @@ function SUCamera._GetProperCorrection(
 	if LastMangitude > CurrentMagnitude then
 		local Diff = LastMangitude - CurrentMagnitude
 		LastCorrectionReturned -= Diff
+		LastCorrectionReturned = math.max(0, LastCorrectionReturned)
 	end
 
 	local ToReturn
 
 	if self.CorrectionReversion == false then
 		ToReturn = CurrentCorrection
-	elseif Time0Preserved >= self.TimeUntilCorrectionReversion then
+	elseif
+		Time0Preserved >= self.TimeUntilCorrectionReversion
+		or (AxisTableKey == "_ZoomCorrectionValues" and Time0Preserved > (self.TimeUntilCorrectionReversion / 2))
+	then
 		-- Apply gradual reversion:
-		ToReturn = math.max(0, LastCorrectionReturned - (CurrentMagnitude * DT * self.CorrectionReversionSpeed))
+		if AxisTableKey ~= "_ZoomCorrectionValues" then
+			ToReturn = math.max(0, LastCorrectionReturned - (CurrentMagnitude * DT * self.CorrectionReversionSpeed))
+		else
+			ToReturn =
+				math.max(0, LastCorrectionReturned - (CurrentMagnitude * DT * (self.CorrectionReversionSpeed * 1.75)))
+		end
 	elseif CurrentCorrection > LastCorrectionReturned then
 		ToReturn = CurrentCorrection
 	else
@@ -655,8 +690,6 @@ function SUCamera._ApplyCorrectionForAxis(
 	else
 		Correction = self:_GetProperCorrection(DT, 0, VecToFocus.Magnitude, AxisTableKey)
 	end
-
-	--print(AxisTableKey, Correction)
 
 	return Focus + (-VecToFocus.Unit * Correction)
 end
@@ -805,9 +838,21 @@ function SUCamera._OnZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinc
 		return
 	end
 
-	-- We replicate PlayerModule behavior
+	--// Replicate playermodule behavior
 
 	local ZoomDelta = (-Wheel + Pinch) * self.ZoomSpeed
+
+	-- Aditional logic for zooming to work better with SU camera collision detection
+
+	if ZoomDelta < 0 and math.abs(self._CurrentPopperZoom - self._ZoomSpring.CurrentPos) > 0.0001 then
+		-- Player tried to Zoom in while the camera is "popped in":
+		self._ZoomSpring.Goal = self._CurrentPopperZoom
+		self._ZoomSpring.CurrentPos = self._CurrentPopperZoom
+		self._ZoomSpring.CurrentVelocity = 0
+	elseif ZoomDelta > 0 and math.abs(self._CurrentPopperZoom - self._ZoomSpring.CurrentPos) > 0.0001 then
+		-- Player tried to Zoom out but camera is already at maximum distance without clipping:
+		return
+	end
 
 	local CurrentZoom = self._ZoomSpring.Goal
 	local NewZoom
