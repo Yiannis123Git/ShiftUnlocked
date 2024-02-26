@@ -384,6 +384,12 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self:_OnCurrentCharacterChanged(LocalPlayer.Character)
 		self:_CurrentCameraChanged(workspace.CurrentCamera)
 
+		-- Make transition to custom camera smooth by facing in same direction as previous camera
+
+		local CameraLook = (self._CurrentCamera :: Camera).CFrame.LookVector
+		self._Yaw = math.atan2(-CameraLook.X, -CameraLook.Z)
+		self._Pitch = math.asin(CameraLook.Y)
+
 		-- Init/Reset Zoom Spring
 
 		self._ZoomSpring.CurrentVelocity = 0
