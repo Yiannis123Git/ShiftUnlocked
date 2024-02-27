@@ -708,9 +708,7 @@ function SUCamera._GetProperCorrection(
 
 	-- Update Time0Preserved
 
-	if AxisTableKey == "_ZoomCorrectionValues" and CurrentCorrection == 0 and self._ZoomState == "ZoomingOut" then
-		self[AxisTableKey].Time0Preserved = self.TimeUntilCorrectionReversion
-	elseif LastCorrection == 0 and CurrentCorrection == 0 then
+	if LastCorrection == 0 and CurrentCorrection == 0 then
 		self[AxisTableKey].Time0Preserved += DT
 	else
 		self[AxisTableKey].Time0Preserved = 0
@@ -732,7 +730,7 @@ function SUCamera._GetProperCorrection(
 		ToReturn = CurrentCorrection
 	elseif
 		Time0Preserved >= self.TimeUntilCorrectionReversion
-		or (AxisTableKey == "_ZoomCorrectionValues" and Time0Preserved > (self.TimeUntilCorrectionReversion / 3))
+		or (AxisTableKey == "_ZoomCorrectionValues" and Time0Preserved > (self.TimeUntilCorrectionReversion / 2))
 	then
 		-- Apply gradual reversion:
 		if AxisTableKey ~= "_ZoomCorrectionValues" then
