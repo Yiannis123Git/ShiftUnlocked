@@ -130,6 +130,10 @@ function ConvertVector3(ToConvert: Vector3): V3
 	return V3.new(ToConvert.X, ToConvert.Y, ToConvert.Z)
 end
 
+function ConvertV3(ToConvert: V3): Vector3
+	return Vector3.new(ToConvert.X, ToConvert.Y, ToConvert.Z)
+end
+
 local Vector3Spring = {}
 Vector3Spring.__index = Vector3Spring
 
@@ -154,15 +158,17 @@ end
 function Vector3Spring.Step(self: Vector3Spring, DT: number)
 	local CurrentPosition = self.Spring:Step(DT)
 
-	return Vector3.new(CurrentPosition.X, CurrentPosition.Y, CurrentPosition.Z)
+	return ConvertV3(CurrentPosition)
 end
 
--- Sets the spring to a dormant state
-
-function Vector3Spring:Reset(CurrentPosition: Vector3)
+function Vector3Spring.Reset(self: Vector3Spring, CurrentPosition: Vector3) -- Sets the spring to a dormant state
 	self.Spring.Position = ConvertVector3(CurrentPosition)
 	self.Spring.Velocity = ConvertVector3(Vector3.new(0, 0, 0))
 	self.Spring.Goal = ConvertVector3(CurrentPosition)
+end
+
+function Vector3Spring.GetDisplacement(self: Vector3Spring): number
+	return (ConvertV3(self.Spring.Goal) - ConvertV3(self.Spring.Position)).Magnitude
 end
 
 return Vector3Spring

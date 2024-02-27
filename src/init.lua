@@ -26,13 +26,14 @@ local JanitorModule = require(script.Parent.janitor)
 local SmartRaycast = require(script.Parent.smartraycast)
 local Popper = require(script.ForkedPopper)
 local ConstrainedSpring = require(script.ConstrainedSpring)
+local Vector3Spring = require(script.Vector3Spring)
 
 --// Variables
 local LocalPlayer = Players.LocalPlayer
 local GameSettings = UserSettings().GameSettings -- Updates RealTime
 local InternalChannelName = HttpService:GenerateGUID() -- This is done so we don't collide with any other user channels
 
---// Settings Defualt Values
+--// Global Settings Defualt Values
 local GCWarn = true
 local GlobalRaycastChannelName = InternalChannelName
 local AutoExcludeChars = true
@@ -125,6 +126,15 @@ type SUCameraProperties = {
 	_CollisionRadius: number,
 	RotateCharacter: boolean,
 	VelocityOffset: boolean,
+	AllowVelocityOffsetOnTeleport: boolean,
+	VelocityOffsetFrequency: number,
+	VelocityOffsetDamping: number,
+	VelocityOffsetVelocityThreshold: number,
+	_Vector3Spring: Vector3Spring.Vector3Spring,
+	_V3SpringConcluded: boolean,
+	_LastFocusPosition: Vector3?,
+	_LastRootPartPosition: Vector3?,
+	_LastCharacterVelocity: Vector3?,
 	MaxZoom: number,
 	MinZoom: number,
 	StartZoom: number,
@@ -176,7 +186,7 @@ function SUCamera.new(): SUCamera
 	-- Configurable Parameters
 
 	self.FOV = 70 -- Camera FOV gets automaticly clamped to 1 - 120
-	self.PitchLimit = 45 -- the max degrees the camera can angle up and down
+	self.PitchLimit = 70 -- the max degrees the camera can angle up and down
 	self.LockedIcon = nil
 	self.UnlockedIcon = nil
 	self.MouseRadsPerPixel = Vector2.new(0.00872664619, 0.00671951752) -- dont worry to much about this setting
@@ -186,6 +196,10 @@ function SUCamera.new(): SUCamera
 	self.ObstructionRange = 6.5 -- Distance from the camera required to start making the local character transparent
 	self.RotateCharacter = true
 	self.VelocityOffset = true
+	self.AllowVelocityOffsetOnTeleport = false
+	self.VelocityOffsetFrequency = 10
+	self.VelocityOffsetDamping = 0.7
+	self.VelocityOffsetVelocityThreshold = 0.7
 	self.ZoomLocked = false
 	self.StartZoom = 12.5
 	self.MaxZoom = 400
@@ -197,7 +211,7 @@ function SUCamera.new(): SUCamera
 	self.CorrectionReversionSpeed = 2.5
 	self.CorrectionReversion = true
 
-	-- State Variables
+	-- Camera State Variables
 
 	self._Enabled = false
 	self._Pitch = 0
@@ -206,6 +220,13 @@ function SUCamera.new(): SUCamera
 	self._CurrentCFrame = CFrame.new()
 	self._CollisionRadius = self:_GetCollisionRadius()
 	self._ZoomState = "Neutral"
+
+	-- Velocty Offset
+
+	self._V3SpringConcluded = true
+	self._LastFocusPosition = nil
+	self._LastRootPartPosition = nil
+	self._LastCharacterVelocity = nil
 
 	-- Occlusion / Focus Collision
 
@@ -232,6 +253,7 @@ function SUCamera.new(): SUCamera
 
 	self._Janitor = JanitorModule.new()
 	self._ZoomSpring = ConstrainedSpring.new(self.ZoomStiffness, self.StartZoom, self.MinZoom, self.MaxZoom)
+	self._Vector3Spring = Vector3Spring.new(self.VelocityOffsetFrequency, self.VelocityOffsetDamping)
 	self._CurrentRootPart = nil
 	self._CurrentHumanoid = nil
 	self._CurrentCamera = nil
@@ -436,6 +458,14 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._ZoomCorrectionValues =
 			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 		self._CurrentPopperZoom = self.StartZoom
+		self._V3SpringConcluded = true
+		self._LastFocusPosition = nil
+		self._LastRootPartPosition = nil
+		self._LastCharacterVelocity = nil
+
+		-- Reset Vector3 Spring
+
+		self._Vector3Spring:Reset(Vector3.new(0, 0, 0))
 	end
 
 	self._Enabled = Enabled -- Might cause method to be droped if code yields for to long
@@ -468,6 +498,11 @@ function SUCamera._Update(self: SUCamera, DT)
 	self._ZoomSpring.MinValue = self.MinZoom
 	self._ZoomSpring.MaxValue = self.MaxZoom
 
+	-- Update Vector3Spring Damping and Frequency
+
+	self._Vector3Spring.Spring.Damping = math.clamp(self.VelocityOffsetDamping, 0, 1)
+	self._Vector3Spring.Spring.Frequency = math.clamp(self.VelocityOffsetFrequency, 1e-5, math.huge)
+
 	-- Set Camera FOV
 
 	self._CurrentCamera.FieldOfView = self.FOV
@@ -496,6 +531,48 @@ function SUCamera._Update(self: SUCamera, DT)
 	local CameraPitchYawRotationAndXYOffset = CameraYawRotationAndXOffset * CameraPitchRotationAndYOffset
 
 	local Focus = RootPartUnrotatedCFrame * (CameraPitchYawRotationAndXYOffset * ZOffset)
+
+	--// Aplly Focus changes if needed
+
+	-- Velocity Offset
+
+	if self._LastFocusPosition == nil or self._LastRootPartPosition == nil then
+		-- First Frame:
+		self._LastFocusPosition = Focus.Position
+		self._LastRootPartPosition = RootPartPos
+	end
+
+	local FocusVelocity = Focus.Position - self._LastFocusPosition :: Vector3
+	local CharacterVelocity = RootPartPos - self._LastRootPartPosition :: Vector3
+
+	self._LastFocusPosition = Focus.Position
+	self._LastRootPartPosition = RootPartPos
+
+	if
+		self.VelocityOffset == true
+		and FocusVelocity.Magnitude > self.VelocityOffsetVelocityThreshold
+		and CharacterVelocity.Magnitude > self.VelocityOffsetVelocityThreshold
+		and (
+			(
+				self._LastCharacterVelocity
+				and self._LastCharacterVelocity.Magnitude > self.VelocityOffsetVelocityThreshold
+			) or self.AllowVelocityOffsetOnTeleport == true
+		)
+	then
+		self._Vector3Spring:SetGoal(FocusVelocity * -1)
+		Focus = Focus + self._Vector3Spring:Step(DT)
+
+		self._V3SpringConcluded = false
+	elseif self._V3SpringConcluded == false then
+		self._Vector3Spring:SetGoal(Vector3.new())
+		Focus = Focus + self._Vector3Spring:Step(DT)
+
+		if self._Vector3Spring:GetDisplacement() <= 0.0001 then
+			self._V3SpringConcluded = true
+		end
+	end
+
+	self._LastCharacterVelocity = CharacterVelocity
 
 	--// FOCUS CORRECTIONS (Order is important)
 
@@ -740,7 +817,7 @@ end
 
 function SUCamera._ApplyInput(self: SUCamera, Yaw: number, Pitch: number) -- produces a Yaw and Pitch that can be used by the Update function
 	local YInvertValue = GameSettings:GetCameraYInvertValue() -- 1 or -1 we need to change input acordingly if the camera is inverted
-	local PitchLimitToRadians = math.rad(math.clamp(self.PitchLimit, 1, 360))
+	local PitchLimitToRadians = math.rad(math.clamp(self.PitchLimit, 1, 89.9))
 
 	self._Yaw = self._Yaw :: number + Yaw
 	self._Pitch = math.clamp(self._Pitch :: number + Pitch * YInvertValue, -PitchLimitToRadians, PitchLimitToRadians)
