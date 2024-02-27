@@ -440,6 +440,10 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			self._CurrentCamera.CameraType = Enum.CameraType.Custom
 		end
 
+		-- Reset Mouse Behavior
+
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
 		-- Reset Camera State Variables
 
 		self._Pitch = 0
@@ -462,6 +466,12 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._LastFocusPosition = nil
 		self._LastRootPartPosition = nil
 		self._LastCharacterVelocity = nil
+
+		-- Set AutoRotate to true if possible
+
+		if self._CurrentHumanoid then
+			self._CurrentHumanoid.AutoRotate = true
+		end
 
 		-- Reset Vector3 Spring
 
@@ -722,7 +732,7 @@ function SUCamera._GetProperCorrection(
 		ToReturn = CurrentCorrection
 	elseif
 		Time0Preserved >= self.TimeUntilCorrectionReversion
-		or (AxisTableKey == "_ZoomCorrectionValues" and Time0Preserved > (self.TimeUntilCorrectionReversion / 2))
+		or (AxisTableKey == "_ZoomCorrectionValues" and Time0Preserved > (self.TimeUntilCorrectionReversion / 3))
 	then
 		-- Apply gradual reversion:
 		if AxisTableKey ~= "_ZoomCorrectionValues" then
@@ -927,8 +937,10 @@ function SUCamera._OnZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinc
 		self._ZoomSpring.CurrentPos = self._CurrentPopperZoom
 		self._ZoomSpring.CurrentVelocity = 0
 	elseif ZoomDelta > 0 and math.abs(self._CurrentPopperZoom - self._ZoomSpring.CurrentPos) > 0.0001 then
-		-- Player tried to Zoom out but camera is already at maximum distance without clipping:
-		return
+		-- Player tried to Zoom out while the camera is "popped in":
+		self._ZoomSpring.Goal = self._CurrentPopperZoom
+		self._ZoomSpring.CurrentPos = self._CurrentPopperZoom
+		self._ZoomSpring.CurrentVelocity = 0
 	end
 
 	local CurrentZoom = self._ZoomSpring.Goal
