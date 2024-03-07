@@ -27,16 +27,21 @@ local SmartRaycast = require(script.Parent.smartraycast)
 local Popper = require(script.ForkedPopper)
 local ConstrainedSpring = require(script.ConstrainedSpring)
 local Vector3Spring = require(script.Vector3Spring)
+local CameraShakeInstance = require(script.CameraShakeInstance)
+local CameraShakePresets = require(script.CameraShakePresets)
 
 --// Variables
 local LocalPlayer = Players.LocalPlayer
 local GameSettings = UserSettings().GameSettings -- Updates RealTime
 local InternalChannelName = HttpService:GenerateGUID() -- This is done so we don't collide with any other user channels
+local CameraShakeState = CameraShakeInstance.CameraShakeState
 
 --// Global Settings Defualt Values
 local GCWarn = true
 local GlobalRaycastChannelName = InternalChannelName
 local AutoExcludeChars = true
+local CameraShakedefaultPosInfluence = Vector3.new(0.15, 0.15, 0.15)
+local CameraShakedefaultRotInfluence = Vector3.new(1, 1, 1)
 
 --// Gamepad thumbstick utilities //--
 
@@ -97,6 +102,9 @@ SUCamera.__index = SUCamera
 SUCamera.GCWarn = GCWarn
 SUCamera.GlobalRaycastChannelName = GlobalRaycastChannelName
 SUCamera.AutoExcludeChars = AutoExcludeChars
+SUCamera.CameraShakePresets = CameraShakePresets
+SUCamera.CameraShakedefaultPosInfluence = CameraShakedefaultPosInfluence
+SUCamera.CameraShakedefaultRotInfluence = CameraShakedefaultRotInfluence
 
 type SUCameraProperties = {
 	FOV: number,
@@ -172,6 +180,8 @@ type SUCameraProperties = {
 	CorrectionReversion: boolean,
 	_ZoomState: string,
 	_CurrentPopperZoom: number,
+	_CamShakeInstances: { CameraShakeInstance.CameraShakeInstance },
+	_CamShakeInstancesToRemove: { number },
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -257,6 +267,8 @@ function SUCamera.new(): SUCamera
 	self._CurrentRootPart = nil
 	self._CurrentHumanoid = nil
 	self._CurrentCamera = nil
+	self._CamShakeInstances = {}
+	self._CamShakeInstancesToRemove = {}
 
 	-- Insert SUCamera to CameraLog table
 
@@ -287,7 +299,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		-- Make sure that other cameras are not enabled
 
 		if #CameraLog > 1 then
-			for _, Cam in pairs(CameraLog) do
+			for _, Cam in CameraLog do
 				assert(not Cam._Enabled, "[ShiftUnlocked] There are more than one SUCameras enabled currently")
 			end
 		end
@@ -476,6 +488,13 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		-- Reset Vector3 Spring
 
 		self._Vector3Spring:Reset(Vector3.new(0, 0, 0))
+
+		-- Reset CameraShake
+
+		for i, CShakeInstance in self._CamShakeInstances do
+			CShakeInstance:StartFadeOut(0)
+			self._CamShakeInstances[i] = nil
+		end
 	end
 
 	self._Enabled = Enabled -- Might cause method to be droped if code yields for to long
@@ -583,6 +602,38 @@ function SUCamera._Update(self: SUCamera, DT)
 	end
 
 	self._LastCharacterVelocity = CharacterVelocity
+
+	-- Camera Shake
+
+	local PosAddShake = Vector3.new()
+	local RotAddShake = Vector3.new()
+
+	local CShakeInstances = self._CamShakeInstances
+
+	for i, CShakeInstance in CShakeInstances do
+		-- Determine Camera shake based on all active shakes and mark inactive ones for removal:
+		local State = CShakeInstance:GetState()
+
+		if State == CameraShakeState.Inactive and CShakeInstance.DeleteOnInactive then
+			self._CamShakeInstancesToRemove[#self._CamShakeInstancesToRemove + 1] = i
+		elseif State ~= CameraShakeState.Inactive then
+			local Shake = CShakeInstance:UpdateShake(DT)
+			PosAddShake = PosAddShake + (Shake * CShakeInstance.PositionInfluence)
+			RotAddShake = RotAddShake + (Shake * CShakeInstance.RotationInfluence)
+		end
+	end
+
+	for i = #self._CamShakeInstancesToRemove, 1, -1 do
+		local Index = self._CamShakeInstancesToRemove[i]
+		table.remove(CShakeInstances, Index)
+		self._CamShakeInstancesToRemove[i] = nil
+	end
+
+	local ShakeCFrame = CFrame.new(PosAddShake)
+		* CFrame.Angles(0, math.rad(RotAddShake.Y), 0)
+		* CFrame.Angles(math.rad(RotAddShake.X), 0, math.rad(RotAddShake.Z))
+
+	Focus = Focus * ShakeCFrame
 
 	--// FOCUS CORRECTIONS (Order is important)
 
@@ -821,6 +872,52 @@ function SUCamera.Destroy(self: SUCamera)
 	table.remove(CameraLog, CameraLogIndex)
 end
 
+--// Camera Shake  //--
+
+function SUCamera.ShakeWithInstance(
+	self: SUCamera,
+	CShakeInstance: CameraShakeInstance.CameraShakeInstance,
+	Sustain: boolean?
+): CameraShakeInstance.CameraShakeInstance
+	self._CamShakeInstances[#self._CamShakeInstances + 1] = CShakeInstance
+
+	if Sustain == true then
+		CShakeInstance:StartFadeIn(CShakeInstance.fadeInDuration)
+	end
+
+	return CShakeInstance
+end
+
+function SUCamera.Shake(
+	self: SUCamera,
+	Magnitude: number,
+	Roughness: number,
+	Sustain: boolean?,
+	FadeInTime: number?,
+	FadeOutTime: number?,
+	PositionInfluence: Vector3?,
+	RotationInfluence: Vector3?
+): CameraShakeInstance.CameraShakeInstance
+	local ShakeInstance = CameraShakeInstance.new(Magnitude, Roughness, FadeInTime, FadeOutTime)
+
+	ShakeInstance.PositionInfluence = (
+		typeof(PositionInfluence) == "Vector3" and PositionInfluence or self.CameraShakedefaultPosInfluence
+	)
+	ShakeInstance.RotationInfluence = (
+		typeof(PositionInfluence) == "Vector3" and PositionInfluence or self.CameraShakedefaultRotInfluence
+	)
+
+	return self:ShakeWithInstance(ShakeInstance, Sustain)
+end
+
+function SUCamera.StopShaking(self: SUCamera, FadeOutTime: number?)
+	for _, CShakeInstance in self._CamShakeInstances do
+		if CShakeInstance.fadeOutDuration == 0 then
+			CShakeInstance:StartFadeOut(FadeOutTime or CShakeInstance.fadeInDuration)
+		end
+	end
+end
+
 --// Input Related //--
 
 function SUCamera._ApplyInput(self: SUCamera, Yaw: number, Pitch: number) -- produces a Yaw and Pitch that can be used by the Update function
@@ -1023,7 +1120,7 @@ function SUCamera._HandleCharacterTrasparency(self: SUCamera)
 	if Distance <= self.ObstructionRange then
 		local ModifierValue = math.max(0.5, 1.1 - (Distance / self.ObstructionRange))
 
-		for _, Descendant in pairs(Character:GetDescendants()) do
+		for _, Descendant in Character:GetDescendants() do
 			if Descendant:IsA("BasePart") then
 				Descendant.LocalTransparencyModifier = ModifierValue
 			end
@@ -1031,7 +1128,7 @@ function SUCamera._HandleCharacterTrasparency(self: SUCamera)
 	elseif self._LastDistanceFromRoot <= self.ObstructionRange then
 		local ModifierValue = 0
 
-		for _, Descendant in pairs(Character:GetDescendants()) do
+		for _, Descendant in Character:GetDescendants() do
 			if Descendant:IsA("BasePart") then
 				Descendant.LocalTransparencyModifier = ModifierValue
 			end
