@@ -209,7 +209,7 @@ function SUCamera.new(): SUCamera
 	self.AllowVelocityOffsetOnTeleport = false
 	self.VelocityOffsetFrequency = 10
 	self.VelocityOffsetDamping = 0.7
-	self.VelocityOffsetVelocityThreshold = 0.7
+	self.VelocityOffsetVelocityThreshold = 0.45
 	self.ZoomLocked = false
 	self.StartZoom = 12.5
 	self.MaxZoom = 400
@@ -411,6 +411,12 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 			for _, Player in Players:GetPlayers() do
 				PlayerAdded(Player)
+				if
+					Player.Character
+					and table.find(RaycastChannel.RayParams.FilterDescendantsInstances, Player.Character) == nil
+				then -- meh i don't like duping items but maybe this check is not really needed here
+					RaycastChannel:AppendToFDI(Player.Character)
+				end
 			end
 
 			self._Janitor:Add(Players.PlayerAdded:Connect(PlayerAdded), "Disconnect")
@@ -433,6 +439,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		self._ZoomSpring.CurrentVelocity = 0
 		self._ZoomSpring.CurrentPos = self.StartZoom
+		self._ZoomSpring.Goal = self.StartZoom
 	else
 		-- Unbind camera update function from render stepped
 
