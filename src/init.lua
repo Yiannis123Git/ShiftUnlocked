@@ -207,8 +207,8 @@ function SUCamera.new(): SUCamera
 	self.RotateCharacter = true
 	self.VelocityOffset = true
 	self.AllowVelocityOffsetOnTeleport = false
-	self.VelocityOffsetFrequency = 10
-	self.VelocityOffsetDamping = 0.7
+	self.VelocityOffsetFrequency = 9.5
+	self.VelocityOffsetDamping = 0.75
 	self.VelocityOffsetVelocityThreshold = 0.45
 	self.ZoomLocked = false
 	self.StartZoom = 12.5
@@ -886,6 +886,8 @@ function SUCamera.ShakeWithInstance(
 	CShakeInstance: CameraShakeInstance.CameraShakeInstance,
 	Sustain: boolean?
 ): CameraShakeInstance.CameraShakeInstance
+	assert(self._Enabled, "Camera must be enabled to shake")
+
 	self._CamShakeInstances[#self._CamShakeInstances + 1] = CShakeInstance
 
 	if Sustain == true then
@@ -905,6 +907,8 @@ function SUCamera.Shake(
 	PositionInfluence: Vector3?,
 	RotationInfluence: Vector3?
 ): CameraShakeInstance.CameraShakeInstance
+	assert(self._Enabled, "Camera must be enabled to shake")
+
 	local ShakeInstance = CameraShakeInstance.new(Magnitude, Roughness, FadeInTime, FadeOutTime)
 
 	ShakeInstance.PositionInfluence = (
