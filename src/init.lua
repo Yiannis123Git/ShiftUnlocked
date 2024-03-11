@@ -90,6 +90,28 @@ end
 
 --// ShiftUnlocked Camera //--
 
+function CreateMouseIcon(): ImageLabel
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Enabled = false
+	ScreenGui.Name = "ShiftUnlockedControllerMouseIconUI"
+	ScreenGui.IgnoreGuiInset = true
+
+	local Frame = Instance.new("Frame")
+	Frame.Size = UDim2.new(1, 0, 1, 0)
+	Frame.BackgroundTransparency = 1
+	Frame.Parent = ScreenGui
+
+	local ImageLabel = Instance.new("ImageLabel")
+	ImageLabel.BackgroundTransparency = 1
+	ImageLabel.Size = UDim2.new(0, 32, 0, 32)
+	ImageLabel.Position = UDim2.new(0.5, -ImageLabel.Size.X.Offset / 2, 0.5, -ImageLabel.Size.Y.Offset / 2)
+	ImageLabel.Parent = Frame
+
+	ScreenGui.Parent = LocalPlayer.PlayerGui
+
+	return ImageLabel
+end
+
 --[=[
 	The ShiftUnlocked Camera 
 
@@ -126,7 +148,7 @@ type SUCameraProperties = {
 	_CurrentRootPart: BasePart?,
 	_CurrentCamera: Camera?,
 	RaycastChannel: SmartRaycast.Channel | nil,
-	_MouseLocked: boolean,
+	MouseLocked: boolean,
 	_CurrentHumanoid: Humanoid | nil,
 	_CurrentCFrame: CFrame,
 	ObstructionRange: number,
@@ -182,6 +204,9 @@ type SUCameraProperties = {
 	_CurrentPopperZoom: number,
 	_CamShakeInstances: { CameraShakeInstance.CameraShakeInstance },
 	_CamShakeInstancesToRemove: { number },
+	_SavedCursor: string,
+	_CustomMouseIcon: ImageLabel,
+	_CurrentInputMethod: string,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -197,8 +222,9 @@ function SUCamera.new(): SUCamera
 
 	self.FOV = 70 -- Camera FOV gets automaticly clamped to 1 - 120
 	self.PitchLimit = 70 -- the max degrees the camera can angle up and down
-	self.LockedIcon = nil
+	self.LockedIcon = "rbxasset://textures/MouseLockedCursor.png"
 	self.UnlockedIcon = nil
+	self.MouseLocked = true
 	self.MouseRadsPerPixel = Vector2.new(0.00872664619, 0.00671951752) -- dont worry to much about this setting
 	self.GamepadSensitivityModifier = Vector2.new(0.85, 0.65)
 	self.CameraOffset = Vector3.new(1.75, 1.5, 0) -- (legay value 1.75,1.5,0)
@@ -226,10 +252,10 @@ function SUCamera.new(): SUCamera
 	self._Enabled = false
 	self._Pitch = 0
 	self._Yaw = 0
-	self._MouseLocked = true
 	self._CurrentCFrame = CFrame.new()
 	self._CollisionRadius = self:_GetCollisionRadius()
 	self._ZoomState = "Neutral"
+	self._CurrentInputMethod = "Mouse&Keyboard"
 
 	-- Velocty Offset
 
@@ -269,6 +295,8 @@ function SUCamera.new(): SUCamera
 	self._CurrentCamera = nil
 	self._CamShakeInstances = {}
 	self._CamShakeInstancesToRemove = {}
+	self._SavedCursor = UserInputService.MouseIcon
+	self._CustomMouseIcon = CreateMouseIcon()
 
 	-- Insert SUCamera to CameraLog table
 
@@ -462,6 +490,12 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		-- Reset Mouse Behavior
 
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIcon = self._SavedCursor
+
+		-- Hide controller mouse icon
+
+		local CustomMouseIconGui = (self._CustomMouseIcon.Parent :: Frame).Parent :: ScreenGui
+		CustomMouseIconGui.Enabled = false
 
 		-- Reset Camera State Variables
 
@@ -521,12 +555,38 @@ function SUCamera._Update(self: SUCamera, DT)
 		return
 	end
 
-	-- Lock/Unlock Mouse (ADD ICON STUFF)
+	-- Update Mouse state and "Mouse" Icon
 
-	if self._MouseLocked == true then
+	if self.MouseLocked == true then
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+
+		if self.LockedIcon then
+			UserInputService.MouseIcon = self.LockedIcon
+		else
+			UserInputService.MouseIcon = self._SavedCursor
+		end
 	else
 		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+
+		if self.UnlockedIcon then
+			UserInputService.MouseIcon = self.UnlockedIcon
+		else
+			UserInputService.MouseIcon = self._SavedCursor
+		end
+	end
+
+	-- Custom mouse icon
+
+	local CustomMouseIconGui = (self._CustomMouseIcon.Parent :: Frame).Parent :: ScreenGui
+
+	if self.LockedIcon then
+		self._CustomMouseIcon.Image = self.LockedIcon
+	end
+
+	if UserInputService.MouseIconEnabled == true and self._CurrentInputMethod ~= "Mouse&Keyboard" then
+		CustomMouseIconGui.Enabled = true
+	else
+		CustomMouseIconGui.Enabled = false
 	end
 
 	-- Update ZoomSpring Limits
@@ -990,8 +1050,31 @@ function SUCamera._ProccessGamepadInput(self: SUCamera, DT: number) -- Produces 
 	self:_ApplyInput(YawInput, PitchInput)
 end
 
+local UserInputTypes = {
+	[Enum.UserInputType.MouseMovement] = "Mouse&Keyboard",
+	[Enum.UserInputType.Keyboard] = "Mouse&Keyboard",
+	[Enum.UserInputType.MouseButton1] = "Mouse&Keyboard",
+	[Enum.UserInputType.MouseButton2] = "Mouse&Keyboard",
+	[Enum.UserInputType.MouseButton3] = "Mouse&Keyboard",
+	[Enum.UserInputType.MouseWheel] = "Mouse&Keyboard",
+	[Enum.UserInputType.Gyro] = "Touch",
+	[Enum.UserInputType.Touch] = "Touch",
+	[Enum.UserInputType.Gamepad1] = "Gamepad",
+	[Enum.UserInputType.Gamepad2] = "Gamepad",
+	[Enum.UserInputType.Gamepad3] = "Gamepad",
+	[Enum.UserInputType.Gamepad4] = "Gamepad",
+	[Enum.UserInputType.Gamepad5] = "Gamepad",
+	[Enum.UserInputType.Gamepad6] = "Gamepad",
+	[Enum.UserInputType.Gamepad7] = "Gamepad",
+	[Enum.UserInputType.Gamepad8] = "Gamepad",
+}
+
 function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
-	if GameProccessed == true then
+	if UserInputTypes[InputObject.UserInputType] then
+		self._CurrentInputMethod = UserInputTypes[InputObject.UserInputType]
+	end
+
+	if GameProccessed == true or self.MouseLocked == false then
 		return
 	end
 
@@ -1007,7 +1090,11 @@ function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, Game
 end
 
 function SUCamera._OnInputBegun(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
-	if GameProccessed == true then
+	if UserInputTypes[InputObject.UserInputType] then
+		self._CurrentInputMethod = UserInputTypes[InputObject.UserInputType]
+	end
+
+	if GameProccessed == true or self.MouseLocked == false then
 		return
 	end
 
