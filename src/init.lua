@@ -599,7 +599,11 @@ function SUCamera._Update(self: SUCamera, DT)
 		self._CustomMouseIcon.Image = self.LockedIcon
 	end
 
-	if UserInputService.MouseIconEnabled == true and self._CurrentInputMethod ~= "Mouse&Keyboard" then
+	if
+		UserInputService.MouseIconEnabled == true
+		and self._CurrentInputMethod ~= "Mouse&Keyboard"
+		and self.LockedIcon
+	then
 		CustomMouseIconGui.Enabled = true
 	else
 		CustomMouseIconGui.Enabled = false
