@@ -112,6 +112,20 @@ function CreateMouseIcon(): ImageLabel
 	return ImageLabel
 end
 
+function PercentDiffFromA(A: number, B: number): number
+	local Difference = B - A
+
+	if Difference <= 1e-5 then
+		return 0 -- no change
+	end
+
+	if A == 0 then
+		return math.huge -- inf increase
+	end
+
+	return math.round((Difference / A) * 100) -- 0 < decrease / 0 > increase
+end
+
 --[=[
 	The ShiftUnlocked Camera 
 
@@ -165,6 +179,7 @@ type SUCameraProperties = {
 	_LastFocusPosition: Vector3?,
 	_LastRootPartPosition: Vector3?,
 	_LastCharacterVelocity: Vector3?,
+	_TeleportationThreshold: number,
 	MaxZoom: number,
 	MinZoom: number,
 	StartZoom: number,
@@ -263,6 +278,7 @@ function SUCamera.new(): SUCamera
 	self._LastFocusPosition = nil
 	self._LastRootPartPosition = nil
 	self._LastCharacterVelocity = nil
+	self._TeleportationThreshold = 500 -- % increase since last frame to be considered teleporation
 
 	-- Occlusion / Focus Collision
 
@@ -632,10 +648,11 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	-- Velocity Offset
 
-	if self._LastFocusPosition == nil or self._LastRootPartPosition == nil then
+	if self._LastFocusPosition == nil or self._LastRootPartPosition == nil or self._LastCharacterVelocity == nil then
 		-- First Frame:
 		self._LastFocusPosition = Focus.Position
 		self._LastRootPartPosition = RootPartPos
+		self._LastCharacterVelocity = Vector3.new()
 	end
 
 	local FocusVelocity = Focus.Position - self._LastFocusPosition :: Vector3
@@ -644,16 +661,22 @@ function SUCamera._Update(self: SUCamera, DT)
 	self._LastFocusPosition = Focus.Position
 	self._LastRootPartPosition = RootPartPos
 
+	local IngnoreVelocityThisFrame = false
+	local PercentDiff =
+		PercentDiffFromA((self._LastCharacterVelocity :: Vector3).Magnitude, CharacterVelocity.Magnitude)
+
+	if PercentDiff > self._TeleportationThreshold * (DT / (1 / 60)) then
+		-- Skip this frame if there has been a proportionally big increase of velocity since the last frame:
+		-- We do this to avoid teleportation velocity spikes:
+		-- This solution does skip frames that are caused by normal movement but it is good enough were there are no noticeable changes in testing:
+		IngnoreVelocityThisFrame = true
+	end
+
 	if
 		self.VelocityOffset == true
 		and FocusVelocity.Magnitude > self.VelocityOffsetVelocityThreshold
 		and CharacterVelocity.Magnitude > self.VelocityOffsetVelocityThreshold
-		and (
-			(
-				self._LastCharacterVelocity
-				and self._LastCharacterVelocity.Magnitude > self.VelocityOffsetVelocityThreshold
-			) or self.AllowVelocityOffsetOnTeleport == true
-		)
+		and (IngnoreVelocityThisFrame == false or self.AllowVelocityOffsetOnTeleport == true)
 	then
 		self._Vector3Spring:SetGoal(FocusVelocity * -1)
 		Focus = Focus + self._Vector3Spring:Step(DT)
