@@ -112,20 +112,6 @@ function CreateMouseIcon(): ImageLabel
 	return ImageLabel
 end
 
-function PercentDiffFromA(A: number, B: number): number
-	local Difference = B - A
-
-	if Difference <= 1e-5 then
-		return 0 -- no change
-	end
-
-	if A == 0 then
-		return math.huge -- inf increase
-	end
-
-	return math.round((Difference / A) * 100) -- 0 < decrease / 0 > increase
-end
-
 --[=[
 	The ShiftUnlocked Camera 
 
@@ -184,7 +170,9 @@ type SUCameraProperties = {
 	MinZoom: number,
 	StartZoom: number,
 	ZoomLocked: boolean,
+	ZoomControllerKey: Enum.KeyCode,
 	_ZoomSpring: ConstrainedSpring.ConstrainedSpring,
+	_ControllerZoomCycleInverted: boolean,
 	ZoomStiffness: number,
 	ZoomSpeed: number,
 	ZoomSensitivityCurvature: number,
@@ -216,7 +204,7 @@ type SUCameraProperties = {
 	},
 	CorrectionReversion: boolean,
 	_ZoomState: string,
-	_CurrentPopperZoom: number,
+	_CurrentCorrectedZoom: number,
 	_CamShakeInstances: { CameraShakeInstance.CameraShakeInstance },
 	_CamShakeInstancesToRemove: { number },
 	_SavedCursor: string,
@@ -258,6 +246,7 @@ function SUCamera.new(): SUCamera
 	self.ZoomStiffness = 4.5
 	self.ZoomSpeed = 1
 	self.ZoomSensitivityCurvature = 0.5
+	self.ZoomControllerKey = Enum.KeyCode.ButtonR3
 	self.TimeUntilCorrectionReversion = 0.8
 	self.CorrectionReversionSpeed = 2.5
 	self.CorrectionReversion = true
@@ -270,6 +259,7 @@ function SUCamera.new(): SUCamera
 	self._CurrentCFrame = CFrame.new()
 	self._CollisionRadius = self:_GetCollisionRadius()
 	self._ZoomState = "Neutral"
+	self._ControllerZoomCycleInverted = false
 	self._CurrentInputMethod = "Mouse&Keyboard"
 
 	-- Velocty Offset
@@ -291,7 +281,7 @@ function SUCamera.new(): SUCamera
 		{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 	self._ZoomCorrectionValues =
 		{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
-	self._CurrentPopperZoom = self.StartZoom
+	self._CurrentCorrectedZoom = self.StartZoom
 
 	-- Gamepad Variables
 
@@ -405,7 +395,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._Janitor:Add(
 			UserInputService.PointerAction:Connect(
 				function(Wheel: number, Pan: Vector2, Pinch: number, GameProccessed: boolean)
-					self:_OnZoomInput(Wheel, Pan, Pinch, GameProccessed)
+					self:_OnMouseZoomInput(Wheel, Pan, Pinch, GameProccessed)
 				end
 			),
 			"Disconnect"
@@ -530,11 +520,12 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 		self._ZoomCorrectionValues =
 			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
-		self._CurrentPopperZoom = self.StartZoom
+		self._CurrentCorrectedZoom = self.StartZoom
 		self._V3SpringConcluded = true
 		self._LastFocusPosition = nil
 		self._LastRootPartPosition = nil
 		self._LastCharacterVelocity = nil
+		self._ControllerZoomCycleInverted = false
 
 		-- Set AutoRotate to true if possible
 
@@ -558,6 +549,20 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 end
 
 --// Camera Update //--
+
+function PercentDiffFromA(A: number, B: number): number
+	local Difference = B - A
+
+	if Difference <= 1e-5 then
+		return 0 -- no change
+	end
+
+	if A == 0 then
+		return math.huge -- inf increase
+	end
+
+	return math.round((Difference / A) * 100) -- 0 < decrease / 0 > increase
+end
 
 function SUCamera._Update(self: SUCamera, DT)
 	debug.profilebegin("ShiftUnlockedUpdate")
@@ -808,9 +813,9 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	self._CurrentCamera.Focus = Focus
 
-	-- Update Current Popper Zoom property
+	-- Update Current Corrected Zoom property
 
-	self._CurrentPopperZoom = PopperResult
+	self._CurrentCorrectedZoom = Zoom - Correction
 
 	-- Apply Character Rotation to match Camera (if needed)
 
@@ -1127,6 +1132,8 @@ function SUCamera._OnInputBegun(self: SUCamera, InputObject: InputObject, GamePr
 
 	if InputObject.KeyCode == Enum.KeyCode.Thumbstick2 then
 		self._GamepadPan = Vector2.new(InputObject.Position.X, InputObject.Position.Y)
+	elseif InputObject.KeyCode == self.ZoomControllerKey then
+		self:_OnControllerZoomInput()
 	end
 end
 
@@ -1140,7 +1147,7 @@ function SUCamera._OnInputEnded(self: SUCamera, InputObject: InputObject, GamePr
 	end
 end
 
-function SUCamera._OnZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinch: number, GameProccessed: boolean)
+function SUCamera._OnMouseZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinch: number, GameProccessed: boolean)
 	if GameProccessed == true or self.ZoomLocked == true then
 		return
 	end
@@ -1151,15 +1158,10 @@ function SUCamera._OnZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinc
 
 	-- Aditional logic for zooming to work better with SU camera collision detection
 
-	if ZoomDelta < 0 and math.abs(self._CurrentPopperZoom - self._ZoomSpring.CurrentPos) > 0.0001 then
-		-- Player tried to Zoom in while the camera is "popped in":
-		self._ZoomSpring.Goal = self._CurrentPopperZoom
-		self._ZoomSpring.CurrentPos = self._CurrentPopperZoom
-		self._ZoomSpring.CurrentVelocity = 0
-	elseif ZoomDelta > 0 and math.abs(self._CurrentPopperZoom - self._ZoomSpring.CurrentPos) > 0.0001 then
-		-- Player tried to Zoom out while the camera is "popped in":
-		self._ZoomSpring.Goal = self._CurrentPopperZoom
-		self._ZoomSpring.CurrentPos = self._CurrentPopperZoom
+	if ZoomDelta ~= 0 and math.abs(self._CurrentCorrectedZoom - self._ZoomSpring.CurrentPos) > 0.0001 then
+		-- Player tried to Zoom while the camera is corrected:
+		self._ZoomSpring.Goal = self._CurrentCorrectedZoom
+		self._ZoomSpring.CurrentPos = self._CurrentCorrectedZoom
 		self._ZoomSpring.CurrentVelocity = 0
 	end
 
@@ -1175,6 +1177,95 @@ function SUCamera._OnZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinc
 	NewZoom = math.clamp(NewZoom, self.MinZoom, self.MaxZoom)
 
 	self._ZoomSpring.Goal = NewZoom
+end
+
+function SUCamera._OnControllerZoomInput(self: SUCamera)
+	if self.ZoomLocked == true then
+		return
+	end
+
+	-- Adjust the StartZoom variable for the case that an incorrect value has been passed so the logic bellow makes sense
+
+	self.StartZoom = math.clamp(self.StartZoom, self.MinZoom, self.MaxZoom)
+
+	if self.StartZoom == self.MaxZoom and self.StartZoom == self.MinZoom then
+		-- No states to alternate between:
+		return
+	end
+
+	-- Calculate zoom steps based on current min/max Zoom Distance
+
+	local IntermidiateDivisor = 2
+
+	local Steps = {
+		self.MinZoom,
+		(self.StartZoom - self.MinZoom) / IntermidiateDivisor,
+		self.StartZoom,
+		(self.MaxZoom - self.StartZoom) / IntermidiateDivisor,
+		self.MaxZoom,
+	}
+
+	-- Adjust steps if necessary
+
+	if self.StartZoom == self.MinZoom then
+		table.remove(Steps, 1)
+		table.remove(Steps, 2)
+	elseif self.StartZoom - self.MinZoom < IntermidiateDivisor then
+		table.remove(Steps, 2)
+	end
+
+	if self.StartZoom == self.MaxZoom then
+		table.remove(Steps, 4)
+		table.remove(Steps, 5)
+	elseif self.MaxZoom - self.StartZoom < IntermidiateDivisor then
+		table.remove(Steps, 4)
+	end
+
+	-- Change Zoom State
+
+	local CurrentState = table.find(Steps, self._ZoomSpring.Goal)
+
+	if CurrentState == nil then
+		local SmallestDiff = math.abs(self._ZoomSpring.Goal - Steps[1])
+		local ClosestState = 1
+
+		for i = 2, #Steps do
+			local Diff = math.abs(self._ZoomSpring.Goal - Steps[i])
+
+			if Diff < SmallestDiff then
+				SmallestDiff = Diff
+				ClosestState = i
+			end
+		end
+
+		CurrentState = ClosestState
+	end
+
+	if CurrentState == #Steps then
+		self._ControllerZoomCycleInverted = true
+	elseif CurrentState == 1 then
+		self._ControllerZoomCycleInverted = false
+	end
+
+	local GoalState
+
+	GoalState = self._ControllerZoomCycleInverted and Steps[CurrentState :: number - 1]
+		or Steps[CurrentState :: number + 1]
+
+	if
+		math.abs(self._CurrentCorrectedZoom - self._ZoomSpring.CurrentPos) > 0.0001
+		and GoalState > self._CurrentCorrectedZoom
+		and CurrentState ~= 1
+	then
+		self._ControllerZoomCycleInverted = true
+
+		while GoalState > self._CurrentCorrectedZoom and GoalState ~= Steps[1] do
+			CurrentState = CurrentState :: number - 1
+			GoalState = Steps[CurrentState :: number]
+		end
+	end
+
+	self._ZoomSpring.Goal = GoalState
 end
 
 --//  Character Removed/Added //--
