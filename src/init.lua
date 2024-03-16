@@ -1074,10 +1074,7 @@ function SUCamera._ProccessGamepadInput(self: SUCamera, DT: number) -- Produces 
 	self._LastThumbstickTime = CurrentTime
 
 	local YawInput = -GamepadPan.X * FinalConstant * self.GamepadSensitivityModifier.X
-	local PitchInput = FinalConstant
-		* GamepadPan.Y
-		* GameSettings:GetCameraYInvertValue()
-		* self.GamepadSensitivityModifier.Y
+	local PitchInput = FinalConstant * GamepadPan.Y * self.GamepadSensitivityModifier.Y
 
 	self:_ApplyInput(YawInput, PitchInput)
 end
