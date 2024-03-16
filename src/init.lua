@@ -48,21 +48,22 @@ local CameraShakedefaultRotInfluence = Vector3.new(1, 1, 1)
 -- k (positive input) and LowerK (negative input) control thumbstick sensitivity; lower values for more responsive extremes, higher values for smoother, more linear control
 -- Adjust these values based on your needs
 -- Current setup has more precise postive value control and fast negative value control
+-- This values are adjusted at runtime based on currently active SU camera settings
 
-local k = 0.5 -- A higher k value makes the curve more linear. A lower k makes it more curved and accelerating
+local K = 0.5 -- A higher k value makes the curve more linear. A lower k makes it more curved and accelerating
 local LowerK = 0.9 -- Same as k, but controls the lower portion of the S-curve for negative input values
-local DEADZONE = 0.25 -- this specifies the range of input values near 0 that will be mapped to 0 output. This creates a "deadzone" in the middle to prevent unintentional input.
+local Deadzone = 0.25 -- this specifies the range of input values near 0 that will be mapped to 0 output. This creates a "deadzone" in the middle to prevent unintentional input.
 
 local function SCurveTransform(t: number)
 	t = math.clamp(t, -1, 1)
 	if t >= 0 then
-		return (k * t) / (k - t + 1)
+		return (K * t) / (K - t + 1)
 	end
 	return -((LowerK * -t) / (LowerK + t + 1))
 end
 
 local function ToSCurveSpace(t: number)
-	return (1 + DEADZONE) * (2 * math.abs(t) - 1) - DEADZONE
+	return (1 + Deadzone) * (2 * math.abs(t) - 1) - Deadzone
 end
 
 local function FromSCurveSpace(t: number)
@@ -142,6 +143,9 @@ type SUCameraProperties = {
 	_LastThumbstickTime: number,
 	_LastThumbstickPos: Vector2,
 	GamepadSensitivityModifier: Vector2,
+	GamepadKValue: number,
+	GamepadLowerKValue: number,
+	GamepadDeadzone: number,
 	_CurrentGamepadSpeed: number,
 	_LastGamepadVelocity: Vector2,
 	CameraOffset: Vector3,
@@ -230,6 +234,9 @@ function SUCamera.new(): SUCamera
 	self.MouseLocked = true
 	self.MouseRadsPerPixel = Vector2.new(0.00872664619, 0.00671951752) -- dont worry to much about this setting
 	self.GamepadSensitivityModifier = Vector2.new(0.85, 0.65)
+	self.GamepadLowerKValue = 0.9
+	self.GamepadKValue = 0.5
+	self.GamepadDeadzone = 0.25
 	self.CameraOffset = Vector3.new(1.75, 1.5, 0) -- (legay value 1.75,1.5,0)
 	self.RaycastChannel = nil
 	self.ObstructionRange = 6.5 -- Distance from the camera required to start making the local character transparent
@@ -1032,6 +1039,10 @@ function SUCamera._ApplyInput(self: SUCamera, Yaw: number, Pitch: number) -- pro
 end
 
 function SUCamera._ProccessGamepadInput(self: SUCamera, DT: number) -- Produces a Yaw and Pitch from GamepadPan Vector2 to be applied via "_ApplyInput" method
+	K = self.GamepadKValue
+	LowerK = self.GamepadLowerKValue
+	Deadzone = self.GamepadDeadzone
+
 	local GamepadPan = GamepadLinearToCurve(self._GamepadPan)
 
 	local MaxGamepadSpeed = 6
