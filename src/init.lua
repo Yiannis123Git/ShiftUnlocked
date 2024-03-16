@@ -973,6 +973,11 @@ function SUCamera.Destroy(self: SUCamera)
 
 	self._Janitor:Destroy()
 
+	-- Destroy custom mouse icon GUI instance
+
+	local CustomMouseIconGui = (self._CustomMouseIcon.Parent :: Frame).Parent :: ScreenGui
+	CustomMouseIconGui:Destroy()
+
 	-- Remove SUCamera from CameraLog table
 
 	table.remove(CameraLog, CameraLogIndex)
