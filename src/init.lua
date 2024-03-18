@@ -425,6 +425,13 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			"Disconnect"
 		)
 
+		self._Janitor:Add(
+			UserInputService.LastInputTypeChanged:Connect(function(InputType: Enum.UserInputType)
+				self:_OnInputTypeChanged(InputType)
+			end),
+			"Disconnect"
+		)
+
 		-- Connect Character Events
 
 		self._Janitor:Add(
@@ -1118,30 +1125,7 @@ function SUCamera._ProccessGamepadInput(self: SUCamera, DT: number) -- Produces 
 	self:_ApplyInput(YawInput, PitchInput)
 end
 
-local UserInputTypes = {
-	[Enum.UserInputType.MouseMovement] = "Mouse&Keyboard",
-	[Enum.UserInputType.Keyboard] = "Mouse&Keyboard",
-	[Enum.UserInputType.MouseButton1] = "Mouse&Keyboard",
-	[Enum.UserInputType.MouseButton2] = "Mouse&Keyboard",
-	[Enum.UserInputType.MouseButton3] = "Mouse&Keyboard",
-	[Enum.UserInputType.MouseWheel] = "Mouse&Keyboard",
-	[Enum.UserInputType.Gyro] = "Touch",
-	[Enum.UserInputType.Touch] = "Touch",
-	[Enum.UserInputType.Gamepad1] = "Gamepad",
-	[Enum.UserInputType.Gamepad2] = "Gamepad",
-	[Enum.UserInputType.Gamepad3] = "Gamepad",
-	[Enum.UserInputType.Gamepad4] = "Gamepad",
-	[Enum.UserInputType.Gamepad5] = "Gamepad",
-	[Enum.UserInputType.Gamepad6] = "Gamepad",
-	[Enum.UserInputType.Gamepad7] = "Gamepad",
-	[Enum.UserInputType.Gamepad8] = "Gamepad",
-}
-
 function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
-	if UserInputTypes[InputObject.UserInputType] then
-		self._CurrentInputMethod = UserInputTypes[InputObject.UserInputType]
-	end
-
 	if GameProccessed == true or self.MouseLocked == false then
 		return
 	end
@@ -1158,10 +1142,6 @@ function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, Game
 end
 
 function SUCamera._OnInputBegun(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
-	if UserInputTypes[InputObject.UserInputType] then
-		self._CurrentInputMethod = UserInputTypes[InputObject.UserInputType]
-	end
-
 	if GameProccessed == true then
 		return
 	end
@@ -1343,6 +1323,31 @@ function SUCamera._OnControllerZoomInput(self: SUCamera)
 	end
 
 	self._ZoomSpring.Goal = GoalState
+end
+
+local UserInputTypes = {
+	[Enum.UserInputType.MouseMovement] = "Mouse&Keyboard",
+	[Enum.UserInputType.Keyboard] = "Mouse&Keyboard",
+	[Enum.UserInputType.MouseButton1] = "Mouse&Keyboard",
+	[Enum.UserInputType.MouseButton2] = "Mouse&Keyboard",
+	[Enum.UserInputType.MouseButton3] = "Mouse&Keyboard",
+	[Enum.UserInputType.MouseWheel] = "Mouse&Keyboard",
+	[Enum.UserInputType.Gyro] = "Touch",
+	[Enum.UserInputType.Touch] = "Touch",
+	[Enum.UserInputType.Gamepad1] = "Gamepad",
+	[Enum.UserInputType.Gamepad2] = "Gamepad",
+	[Enum.UserInputType.Gamepad3] = "Gamepad",
+	[Enum.UserInputType.Gamepad4] = "Gamepad",
+	[Enum.UserInputType.Gamepad5] = "Gamepad",
+	[Enum.UserInputType.Gamepad6] = "Gamepad",
+	[Enum.UserInputType.Gamepad7] = "Gamepad",
+	[Enum.UserInputType.Gamepad8] = "Gamepad",
+}
+
+function SUCamera._OnInputTypeChanged(self: SUCamera, UserInputType: Enum.UserInputType)
+	if UserInputTypes[UserInputType] then
+		self._CurrentInputMethod = UserInputTypes[UserInputType]
+	end
 end
 
 --//  Character Removed/Added //--
