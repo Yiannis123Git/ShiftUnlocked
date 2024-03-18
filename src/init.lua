@@ -175,10 +175,16 @@ type SUCameraProperties = {
 	StartZoom: number,
 	ZoomLocked: boolean,
 	ZoomControllerKey: Enum.KeyCode,
+	ZoomInKeyboardKey: Enum.KeyCode,
+	ZoomOutKeyboardKey: Enum.KeyCode,
+	_ZoomInKeyDown: boolean,
+	_ZoomOutKeyDown: boolean,
 	_ZoomSpring: ConstrainedSpring.ConstrainedSpring,
 	_ControllerZoomCycleInverted: boolean,
+
 	ZoomStiffness: number,
-	ZoomSpeed: number,
+	ZoomSpeedMouse: number,
+	ZoomSpeedKeyboard: number,
 	ZoomSensitivityCurvature: number,
 	TimeUntilCorrectionReversion: number,
 	CorrectionReversionSpeed: number,
@@ -251,9 +257,12 @@ function SUCamera.new(): SUCamera
 	self.MaxZoom = 400
 	self.MinZoom = 2
 	self.ZoomStiffness = 4.5
-	self.ZoomSpeed = 1
+	self.ZoomSpeedMouse = 1
+	self.ZoomSpeedKeyboard = 0.1
 	self.ZoomSensitivityCurvature = 0.5
 	self.ZoomControllerKey = Enum.KeyCode.ButtonR3
+	self.ZoomInKeyboardKey = Enum.KeyCode.I
+	self.ZoomOutKeyboardKey = Enum.KeyCode.O
 	self.TimeUntilCorrectionReversion = 0.8
 	self.CorrectionReversionSpeed = 2.5
 	self.CorrectionReversion = true
@@ -268,6 +277,8 @@ function SUCamera.new(): SUCamera
 	self._ZoomState = "Neutral"
 	self._ControllerZoomCycleInverted = false
 	self._CurrentInputMethod = "Mouse&Keyboard"
+	self._ZoomInKeyDown = false
+	self._ZoomOutKeyDown = false
 
 	-- Velocty Offset
 
@@ -369,6 +380,12 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		-- Enable Popper
 
 		Popper.SetEnabled(true)
+
+		-- Bind camera zoom keyboard input function to render stepped
+
+		RunService:BindToRenderStep("SUCameraKeyboardZoom", Enum.RenderPriority.Camera.Value - 2, function()
+			self:_KeyboardZoomStep()
+		end)
 
 		-- Bind camera update function to render stepped
 
@@ -486,6 +503,10 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		RunService:UnbindFromRenderStep("SUCameraUpdate")
 
+		-- Unbind Keyboard Zoom Input function in case it was active
+
+		RunService:UnbindFromRenderStep("SUCameraKeyboardZoom")
+
 		-- Disable Popper
 
 		Popper.SetEnabled(false)
@@ -519,6 +540,8 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._CurrentGamepadSpeed = 0
 		self._LastGamepadVelocity = Vector2.new(0, 0)
 		self._ZoomState = "Neutral"
+		self._ZoomInKeyDown = false
+		self._ZoomOutKeyDown = false
 		self._YAxisCorrectionValues =
 			{ LastCorrectionReturned = 0, LastMangitude = 0, Time0Preserved = 0, LastCorrection = 0 }
 		self._XAxisCorrectionValues =
@@ -1139,14 +1162,18 @@ function SUCamera._OnInputBegun(self: SUCamera, InputObject: InputObject, GamePr
 		self._CurrentInputMethod = UserInputTypes[InputObject.UserInputType]
 	end
 
-	if GameProccessed == true or self.MouseLocked == false then
+	if GameProccessed == true then
 		return
 	end
 
-	if InputObject.KeyCode == Enum.KeyCode.Thumbstick2 then
+	if InputObject.KeyCode == Enum.KeyCode.Thumbstick2 and self.MouseLocked == true then
 		self._GamepadPan = Vector2.new(InputObject.Position.X, InputObject.Position.Y)
 	elseif InputObject.KeyCode == self.ZoomControllerKey then
 		self:_OnControllerZoomInput()
+	elseif InputObject.KeyCode == self.ZoomInKeyboardKey then
+		self._ZoomInKeyDown = true
+	elseif InputObject.KeyCode == self.ZoomOutKeyboardKey then
+		self._ZoomOutKeyDown = true
 	end
 end
 
@@ -1157,6 +1184,39 @@ function SUCamera._OnInputEnded(self: SUCamera, InputObject: InputObject, GamePr
 
 	if InputObject.KeyCode == Enum.KeyCode.Thumbstick2 then
 		self._GamepadPan = Vector2.new(0, 0)
+	elseif InputObject.KeyCode == self.ZoomInKeyboardKey then
+		self._ZoomInKeyDown = false
+	elseif InputObject.KeyCode == self.ZoomOutKeyboardKey then
+		self._ZoomOutKeyDown = false
+	end
+end
+
+function SUCamera._KeyboardZoomStep(self: SUCamera)
+	-- Account for the keys being set to nil while held down
+
+	if self.ZoomInKeyboardKey == nil then
+		self._ZoomInKeyDown = false
+	end
+
+	if self.ZoomOutKeyboardKey == nil then
+		self._ZoomOutKeyDown = false
+	end
+
+	local ZoomInState = 0
+	local ZoomOutState = 0
+
+	if self._ZoomInKeyDown == true then
+		ZoomInState = 1
+	end
+
+	if self._ZoomOutKeyDown == true then
+		ZoomOutState = 1
+	end
+
+	local ZoomDelta = (ZoomOutState - ZoomInState) * self.ZoomSpeedKeyboard
+
+	if ZoomDelta ~= 0 then
+		self:_ProcessZoomDelta(ZoomDelta)
 	end
 end
 
@@ -1165,10 +1225,12 @@ function SUCamera._OnMouseZoomInput(self: SUCamera, Wheel: number, Pan: Vector2,
 		return
 	end
 
-	--// Replicate playermodule behavior
+	local ZoomDelta = (-Wheel + Pinch) * self.ZoomSpeedMouse
 
-	local ZoomDelta = (-Wheel + Pinch) * self.ZoomSpeed
+	self:_ProcessZoomDelta(ZoomDelta)
+end
 
+function SUCamera._ProcessZoomDelta(self: SUCamera, ZoomDelta: number)
 	-- Aditional logic for zooming to work better with SU camera collision detection
 
 	if ZoomDelta ~= 0 and math.abs(self._CurrentCorrectedZoom - self._ZoomSpring.CurrentPos) > 0.0001 then
@@ -1177,6 +1239,8 @@ function SUCamera._OnMouseZoomInput(self: SUCamera, Wheel: number, Pan: Vector2,
 		self._ZoomSpring.CurrentPos = self._CurrentCorrectedZoom
 		self._ZoomSpring.CurrentVelocity = 0
 	end
+
+	-- Replicate playermodule behavior
 
 	local CurrentZoom = self._ZoomSpring.Goal
 	local NewZoom
@@ -1286,7 +1350,7 @@ end
 function SUCamera._OnCurrentCharacterChanged(self: SUCamera, Character: Instance?)
 	if Character ~= nil then
 		local Humanoid = Character:WaitForChild("Humanoid") :: Humanoid
-		self._CurrentHumanoid = Humanoid :: Humanoid? -- typechecking issues...
+		self._CurrentHumanoid = Humanoid
 		self._CurrentRootPart = Humanoid.RootPart
 	else
 		self._CurrentHumanoid = nil
