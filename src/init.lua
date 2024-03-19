@@ -143,6 +143,7 @@ type SUCameraProperties = {
 	_LastThumbstickTime: number,
 	_LastThumbstickPos: Vector2,
 	GamepadSensitivityModifier: Vector2,
+	TouchSensitivityModifier: Vector2,
 	GamepadKValue: number,
 	GamepadLowerKValue: number,
 	GamepadDeadzone: number,
@@ -181,9 +182,9 @@ type SUCameraProperties = {
 	_ZoomOutKeyDown: boolean,
 	_ZoomSpring: ConstrainedSpring.ConstrainedSpring,
 	_ControllerZoomCycleInverted: boolean,
-
 	ZoomStiffness: number,
 	ZoomSpeedMouse: number,
+	ZoomSpeedTouch: number,
 	ZoomSpeedKeyboard: number,
 	ZoomSensitivityCurvature: number,
 	TimeUntilCorrectionReversion: number,
@@ -220,6 +221,8 @@ type SUCameraProperties = {
 	_SavedCursor: string,
 	_CustomMouseIcon: ImageLabel,
 	_CurrentInputMethod: string,
+	_ActiveTouchInputs: { InputObject },
+	_LastPinchDiameter: number?,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -240,6 +243,7 @@ function SUCamera.new(): SUCamera
 	self.MouseLocked = true
 	self.MouseRadsPerPixel = Vector2.new(0.00872664619, 0.00671951752) -- dont worry to much about this setting
 	self.GamepadSensitivityModifier = Vector2.new(0.85, 0.65)
+	self.TouchSensitivityModifier = Vector2.new(1 / 100, 1 / 100)
 	self.GamepadLowerKValue = 0.9
 	self.GamepadKValue = 0.5
 	self.GamepadDeadzone = 0.25
@@ -259,6 +263,7 @@ function SUCamera.new(): SUCamera
 	self.ZoomStiffness = 4.5
 	self.ZoomSpeedMouse = 1
 	self.ZoomSpeedKeyboard = 0.1
+	self.ZoomSpeedTouch = 0.04
 	self.ZoomSensitivityCurvature = 0.5
 	self.ZoomControllerKey = Enum.KeyCode.ButtonR3
 	self.ZoomInKeyboardKey = Enum.KeyCode.I
@@ -279,6 +284,8 @@ function SUCamera.new(): SUCamera
 	self._CurrentInputMethod = "Mouse&Keyboard"
 	self._ZoomInKeyDown = false
 	self._ZoomOutKeyDown = false
+	self._ActiveTouchInputs = {}
+	self._LastPinchDiameter = nil
 
 	-- Velocty Offset
 
@@ -563,6 +570,8 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._LastRootPartPosition = nil
 		self._LastCharacterVelocity = nil
 		self._ControllerZoomCycleInverted = false
+		self._ActiveTouchInputs = {}
+		self._LastPinchDiameter = nil
 
 		-- Set AutoRotate to true if possible
 
@@ -1138,15 +1147,49 @@ function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, Game
 		self:_ApplyInput(YawInput, PitchInput)
 	elseif InputObject.KeyCode == Enum.KeyCode.Thumbstick2 then
 		self._GamepadPan = Vector2.new(InputObject.Position.X, InputObject.Position.Y)
+	elseif InputObject.UserInputType == Enum.UserInputType.Touch then
+		if #self._ActiveTouchInputs == 1 then
+			-- Camera rotation
+			local InputDelta = Vector2.new(InputObject.Delta.X, InputObject.Delta.Y)
+				* -1
+				* self.TouchSensitivityModifier
+
+			self:_ApplyInput(InputDelta.X, InputDelta.Y)
+		elseif #self._ActiveTouchInputs == 2 then
+			-- Camera Zoom
+			local PinchDiameter = (self._ActiveTouchInputs[1].Position - self._ActiveTouchInputs[2].Position).Magnitude
+
+			if self._LastPinchDiameter then
+				local ZoomDelta = ((PinchDiameter - self._LastPinchDiameter) * -1) * self.ZoomSpeedTouch
+
+				self:_ProcessZoomDelta(ZoomDelta)
+			end
+
+			self._LastPinchDiameter = PinchDiameter
+		else
+			self._LastPinchDiameter = nil
+		end
 	end
 end
 
+function OnDynamicThumbstickFrame(Position: Vector2): boolean
+	local GUIObjects = LocalPlayer.PlayerGui:GetGuiObjectsAtPosition(Position.X, Position.Y)
+
+	for _, GUIObject in ipairs(GUIObjects) do
+		if GUIObject.Name == "DynamicThumbstickFrame" then
+			return true
+		end
+	end
+
+	return false
+end
+
 function SUCamera._OnInputBegun(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
-	if GameProccessed == true then
+	if GameProccessed == true or self.MouseLocked == false then
 		return
 	end
 
-	if InputObject.KeyCode == Enum.KeyCode.Thumbstick2 and self.MouseLocked == true then
+	if InputObject.KeyCode == Enum.KeyCode.Thumbstick2 then
 		self._GamepadPan = Vector2.new(InputObject.Position.X, InputObject.Position.Y)
 	elseif InputObject.KeyCode == self.ZoomControllerKey then
 		self:_OnControllerZoomInput()
@@ -1154,20 +1197,31 @@ function SUCamera._OnInputBegun(self: SUCamera, InputObject: InputObject, GamePr
 		self._ZoomInKeyDown = true
 	elseif InputObject.KeyCode == self.ZoomOutKeyboardKey then
 		self._ZoomOutKeyDown = true
+	elseif
+		InputObject.UserInputType == Enum.UserInputType.Touch
+		and OnDynamicThumbstickFrame(Vector2.new(InputObject.Position.X, InputObject.Position.Y)) == false
+	then
+		self._ActiveTouchInputs[#self._ActiveTouchInputs + 1] = InputObject
 	end
 end
 
 function SUCamera._OnInputEnded(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
-	if GameProccessed == true then
-		return
-	end
-
 	if InputObject.KeyCode == Enum.KeyCode.Thumbstick2 then
 		self._GamepadPan = Vector2.new(0, 0)
 	elseif InputObject.KeyCode == self.ZoomInKeyboardKey then
 		self._ZoomInKeyDown = false
 	elseif InputObject.KeyCode == self.ZoomOutKeyboardKey then
 		self._ZoomOutKeyDown = false
+	elseif InputObject.UserInputType == Enum.UserInputType.Touch then
+		-- Remove this input from the active touch inputs if needed
+
+		local Index = table.find(self._ActiveTouchInputs, InputObject)
+
+		if Index then
+			table.remove(self._ActiveTouchInputs, Index)
+		end
+
+		self._LastPinchDiameter = nil
 	end
 end
 
