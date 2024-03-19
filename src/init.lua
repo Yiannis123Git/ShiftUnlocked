@@ -281,7 +281,7 @@ function SUCamera.new(): SUCamera
 	self._CollisionRadius = self:_GetCollisionRadius()
 	self._ZoomState = "Neutral"
 	self._ControllerZoomCycleInverted = false
-	self._CurrentInputMethod = "Mouse&Keyboard"
+	self._CurrentInputMethod = self:_GetCurrentInputMethod()
 	self._ZoomInKeyDown = false
 	self._ZoomOutKeyDown = false
 	self._ActiveTouchInputs = {}
@@ -512,6 +512,10 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._ZoomSpring.CurrentVelocity = 0
 		self._ZoomSpring.CurrentPos = self.StartZoom
 		self._ZoomSpring.Goal = self.StartZoom
+
+		-- Init current input method
+
+		self._CurrentInputMethod = self:_GetCurrentInputMethod()
 	else
 		-- Unbind camera update function from render stepped
 
@@ -1402,6 +1406,10 @@ function SUCamera._OnInputTypeChanged(self: SUCamera, UserInputType: Enum.UserIn
 	if UserInputTypes[UserInputType] then
 		self._CurrentInputMethod = UserInputTypes[UserInputType]
 	end
+end
+
+function SUCamera._GetCurrentInputMethod(self: SUCamera): string
+	return UserInputTypes[UserInputService:GetLastInputType()]
 end
 
 --//  Character Removed/Added //--
