@@ -21,6 +21,7 @@ Client
 # Moonwave 
 build
 docs
+moonwave.toml
 
 # Debug
 Debug
