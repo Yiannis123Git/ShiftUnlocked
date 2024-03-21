@@ -14,17 +14,16 @@ RobloxSource
 
 # Wally
 Packages
+wally.lock
 
 # Testing 
 Client
-
-# Moonwave 
-build
-docs
-moonwave.toml
 
 # Debug
 Debug
 
 # Source Map
 sourcemap.json
+
+# python
+.venv
