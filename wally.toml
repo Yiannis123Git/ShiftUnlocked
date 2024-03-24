@@ -1,9 +1,0 @@
-[package]
-name = "yiannis123/shiftunlocked"
-version = "2.0.0"
-registry = "https://github.com/UpliftGames/wally-index"
-realm = "shared"
-
-[dependencies]
-janitor = "howmanysmall/janitor@^1.15.6"
-smartraycast = "yiannis123git/smartraycast@^1.2.1"
