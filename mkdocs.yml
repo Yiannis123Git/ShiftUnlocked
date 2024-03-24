@@ -1,12 +1,13 @@
 site_name: ShiftUnlocked
 
 repo_url: https://github.com/Yiannis123Git/ShiftUnlocked
-repo_name: Source
+repo_name: Yiannis123Git/ShiftUnlocked
 
 theme:
   name: material
   language: en
   logo: assets/ShiftUnlockedLogo.png
+  favicon: assets/ShiftUnlockedLogo.png
   features:
     - search.share
     - search.highlight
