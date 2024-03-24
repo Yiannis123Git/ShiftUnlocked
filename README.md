@@ -22,6 +22,6 @@ shiftunlocked = "yiannis123git/shiftunlocked@*"
 ### Manual
 Download `ShiftUnlocked.rbxm` from the [latest release](https://github.com/Yiannis123Git/ShiftUnlocked/releases/latest) and drag and drop the file into Roblox Studio.
 
-## This project was made possible thanks to following github repositories
+## This project was made possible thanks to the following GitHub repositories
 * [AdvancedSpring](https://github.com/Sleitnick/RbxCameraShaker) by [DervexDev](https://github.com/DervexDev)
 * [RbxCameraShaker](https://github.com/DervexDev/AdvancedSpring) by [Sleitnick](https://github.com/Sleitnick)
