@@ -40,8 +40,8 @@ local CameraShakeState = CameraShakeInstance.CameraShakeState
 local GCWarn = true
 local GlobalRaycastChannelName = InternalChannelName
 local AutoExcludeChars = true
-local CameraShakedefaultPosInfluence = Vector3.new(0.15, 0.15, 0.15)
-local CameraShakedefaultRotInfluence = Vector3.new(1, 1, 1)
+local CameraShakeDefaultPosInfluence = Vector3.new(0.15, 0.15, 0.15)
+local CameraShakeDefaultRotInfluence = Vector3.new(1, 1, 1)
 
 --// Gamepad thumbstick utilities //--
 
@@ -125,9 +125,10 @@ SUCamera.__index = SUCamera
 SUCamera.GCWarn = GCWarn
 SUCamera.GlobalRaycastChannelName = GlobalRaycastChannelName
 SUCamera.AutoExcludeChars = AutoExcludeChars
+SUCamera.CameraShakeInstance = CameraShakeInstance
 SUCamera.CameraShakePresets = CameraShakePresets
-SUCamera.CameraShakedefaultPosInfluence = CameraShakedefaultPosInfluence
-SUCamera.CameraShakedefaultRotInfluence = CameraShakedefaultRotInfluence
+SUCamera.CameraShakeDefaultPosInfluence = CameraShakeDefaultPosInfluence
+SUCamera.CameraShakeDefaultRotInfluence = CameraShakeDefaultRotInfluence
 
 type SUCameraProperties = {
 	FOV: number,
@@ -175,9 +176,9 @@ type SUCameraProperties = {
 	MinZoom: number,
 	StartZoom: number,
 	ZoomLocked: boolean,
-	ZoomControllerKey: Enum.KeyCode,
-	ZoomInKeyboardKey: Enum.KeyCode,
-	ZoomOutKeyboardKey: Enum.KeyCode,
+	ZoomControllerKey: Enum.KeyCode?,
+	ZoomInKeyboardKey: Enum.KeyCode?,
+	ZoomOutKeyboardKey: Enum.KeyCode?,
 	_ZoomInKeyDown: boolean,
 	_ZoomOutKeyDown: boolean,
 	_ZoomSpring: ConstrainedSpring.ConstrainedSpring,
@@ -658,16 +659,19 @@ function SUCamera._Update(self: SUCamera, DT)
 		UserInputService.MouseIconEnabled == true
 		and self._CurrentInputMethod ~= "Mouse&Keyboard"
 		and self.LockedIcon
+		and self.MouseLocked == true
 	then
 		CustomMouseIconGui.Enabled = true
 	else
 		CustomMouseIconGui.Enabled = false
 	end
 
-	-- Update ZoomSpring Limits
+	-- Update ZoomSpring limits and frequency
 
 	self._ZoomSpring.MinValue = self.MinZoom
 	self._ZoomSpring.MaxValue = self.MaxZoom
+
+	self._ZoomSpring.Freq = self.ZoomStiffness
 
 	-- Update Vector3Spring Damping and Frequency
 
@@ -1059,10 +1063,10 @@ function SUCamera.Shake(
 	local ShakeInstance = CameraShakeInstance.new(Magnitude, Roughness, FadeInTime, FadeOutTime)
 
 	ShakeInstance.PositionInfluence = (
-		typeof(PositionInfluence) == "Vector3" and PositionInfluence or self.CameraShakedefaultPosInfluence
+		typeof(PositionInfluence) == "Vector3" and PositionInfluence or self.CameraShakeDefaultPosInfluence
 	)
 	ShakeInstance.RotationInfluence = (
-		typeof(PositionInfluence) == "Vector3" and PositionInfluence or self.CameraShakedefaultRotInfluence
+		typeof(RotationInfluence) == "Vector3" and RotationInfluence or self.CameraShakeDefaultRotInfluence
 	)
 
 	return self:ShakeWithInstance(ShakeInstance, Sustain)

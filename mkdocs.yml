@@ -1,0 +1,80 @@
+site_name: ShiftUnlocked
+
+repo_url: https://github.com/Yiannis123Git/ShiftUnlocked
+repo_name: Source
+
+theme:
+  name: material
+  language: en
+  logo: assets/ShiftUnlockedLogo.png
+  features:
+    - search.share
+    - search.highlight
+    - search.suggest
+    - navigation.indexes
+    - navigation.path
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.tracking
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - content.code.copy
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/toggle-switch-off-outline 
+        name: Switch to dark mode
+      primary: deep purple
+      accent: purple 
+
+    - scheme: slate 
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to light mode    
+      primary: deep purple
+      accent: lime
+
+extra:
+  social:
+    - icon: fontawesome/brands/github-alt
+      link: https://github.com/Yiannis123Git
+    - icon: simple/roblox
+      link: https://www.roblox.com/users/51762172/profile
+
+plugins:
+  - search
+  
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - admonition
+  - pymdownx.arithmatex:
+      generic: true
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.mark
+  - attr_list
+
+ 
+# Page tree
+
+nav: 
+ - Getting Started:
+   - "Introduction": index.md
+   - "Setting up the camera": Setup.md
+   - "Using the camera": UsingTheCamera.md
+ - API: 
+   - "Camera Properties": CameraProperties.md
+   - "Camera Methods": CameraMethods.md
+   - "Global Settings": CameraGlobalSettings.md
+   
+
+
+
+
+copyright: |
+  &copy; 2024 <a href="https://github.com/Yiannis123Git"  target="_blank" rel="noopener">Yiannis123
