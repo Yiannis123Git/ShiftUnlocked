@@ -29,7 +29,7 @@ ShiftUnlockedCamera.ZoomLocked = true
 ```
   
 ### Changing the RaycastChannel
-A beneficial adjustment to consider is modifying the camera's raycast [Channel](https://yiannis123git.github.io/SmartRaycast/api/Channel). This is because ShiftUnlocked is quite strict with its collision detection to ensure an immersive environment. However, camera clipping through an object is not always a bad thing. At times, small or insignificant objects like a mug on a coffee table or a street lamp could be ignored to improve user experience. 
+A beneficial adjustment to consider is modifying the camera's raycast [Channel](https://yiannis123git.github.io/SmartRaycast/Channel/). This is because ShiftUnlocked is quite strict with its collision detection to ensure an immersive environment. However, camera clipping through an object is not always a bad thing. At times, small or insignificant objects like a mug on a coffee table or a street lamp could be ignored to improve user experience. 
   
 The easiest way to achieve this is by using a plugin like [Tag Editor](https://devforum.roblox.com/t/tag-editor-plugin/101133), which can enable you to tag objects you want to ignore with the [Collection Service](https://create.roblox.com/docs/reference/engine/classes/CollectionService). (You don't have to manually tag each object.)
   
@@ -38,17 +38,23 @@ After we have tagged our objects using the collection service, we can proceed wi
 ```lua
 local SmartRaycast = require(PathToOurModule.smartraycast)
 
-local OurChannel = SmartRaycast.CreateChannel(
-    "ShiftUnlocked",
+local function CanBeAdded(Inst)
+	if Inst.Transparency == 1 or Inst.CanCollide == false then
+		return true
+	end
+	return false
+end
+
+
+local CameraChannel = SmartRaycast.CreateChannel(
+    "CameraChannel",
     {"OurCollectionServiceTag"},
-    nil,
-    nil,
+    CanBeAdded,
     Enum.RaycastFilterType.Exclude, 
     -- ...
 )
 
 ShiftUnlockedCamera.RaycastChannel = OurChannel
-
 ```
 
-This a simple implementation, you can introduce more paramaters for your [Channel](https://yiannis123git.github.io/SmartRaycast/api/Channel) as needed.
+This a simple implementation, you can introduce more paramaters for your [Channel](https://yiannis123git.github.io/SmartRaycast/Channel/) as needed.

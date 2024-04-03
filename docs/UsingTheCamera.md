@@ -16,7 +16,7 @@ ShiftUnlockedCamera:SetEnabled(false)
 
 ## Destroying the camera
 
-After we finish using a camera object, we can destroy it to free up memory by doing the following.
+After we finish using a camera object, we can destroy it by doing the following.
 
 ```lua
 ShiftUnlockedCamera:Destroy()
