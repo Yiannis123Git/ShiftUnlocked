@@ -703,23 +703,30 @@
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">ShiftUnlockedCamera</span><span class="p">.</span><span class="n">ZoomLocked</span> <span class="o">=</span> <span class="kc">true</span> 
 </code></pre></div>
 <h3 id="changing-the-raycastchannel">Changing the RaycastChannel</h3>
-<p>A beneficial adjustment to consider is modifying the camera's raycast <a href="https://yiannis123git.github.io/SmartRaycast/api/Channel">Channel</a>. This is because ShiftUnlocked is quite strict with its collision detection to ensure an immersive environment. However, camera clipping through an object is not always a bad thing. At times, small or insignificant objects like a mug on a coffee table or a street lamp could be ignored to improve user experience. </p>
+<p>A beneficial adjustment to consider is modifying the camera's raycast <a href="https://yiannis123git.github.io/SmartRaycast/Channel/">Channel</a>. This is because ShiftUnlocked is quite strict with its collision detection to ensure an immersive environment. However, camera clipping through an object is not always a bad thing. At times, small or insignificant objects like a mug on a coffee table or a street lamp could be ignored to improve user experience. </p>
 <p>The easiest way to achieve this is by using a plugin like <a href="https://devforum.roblox.com/t/tag-editor-plugin/101133">Tag Editor</a>, which can enable you to tag objects you want to ignore with the <a href="https://create.roblox.com/docs/reference/engine/classes/CollectionService">Collection Service</a>. (You don't have to manually tag each object.)</p>
 <p>After we have tagged our objects using the collection service, we can proceed with the following steps through code:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kd">local</span> <span class="n">SmartRaycast</span> <span class="o">=</span> <span class="nb">require</span><span class="p">(</span><span class="n">PathToOurModule</span><span class="p">.</span><span class="n">smartraycast</span><span class="p">)</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kd">local</span> <span class="n">OurChannel</span> <span class="o">=</span> <span class="n">SmartRaycast</span><span class="p">.</span><span class="n">CreateChannel</span><span class="p">(</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="s2">&quot;ShiftUnlocked&quot;</span><span class="p">,</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="p">{</span><span class="s2">&quot;OurCollectionServiceTag&quot;</span><span class="p">},</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="kc">nil</span><span class="p">,</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="kc">nil</span><span class="p">,</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">Enum</span><span class="p">.</span><span class="n">RaycastFilterType</span><span class="p">.</span><span class="n">Exclude</span><span class="p">,</span> 
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="c1">-- ...</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="p">)</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">ShiftUnlockedCamera</span><span class="p">.</span><span class="n">RaycastChannel</span> <span class="o">=</span> <span class="n">OurChannel</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kd">local</span> <span class="kr">function</span> <span class="nf">CanBeAdded</span><span class="p">(</span><span class="n">Inst</span><span class="p">)</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="kr">if</span> <span class="n">Inst</span><span class="p">.</span><span class="n">Transparency</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">Inst</span><span class="p">.</span><span class="n">CanCollide</span> <span class="o">==</span> <span class="kc">false</span> <span class="kr">then</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="kr">return</span> <span class="kc">true</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="kr">end</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="kr">return</span> <span class="kc">false</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="kr">end</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="kd">local</span> <span class="n">CameraChannel</span> <span class="o">=</span> <span class="n">SmartRaycast</span><span class="p">.</span><span class="n">CreateChannel</span><span class="p">(</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="s2">&quot;CameraChannel&quot;</span><span class="p">,</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="p">{</span><span class="s2">&quot;OurCollectionServiceTag&quot;</span><span class="p">},</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="n">CanBeAdded</span><span class="p">,</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="n">Enum</span><span class="p">.</span><span class="n">RaycastFilterType</span><span class="p">.</span><span class="n">Exclude</span><span class="p">,</span> 
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    <span class="c1">-- ...</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="p">)</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="n">ShiftUnlockedCamera</span><span class="p">.</span><span class="n">RaycastChannel</span> <span class="o">=</span> <span class="n">OurChannel</span>
 </code></pre></div>
-<p>This a simple implementation, you can introduce more paramaters for your <a href="https://yiannis123git.github.io/SmartRaycast/api/Channel">Channel</a> as needed.</p>
+<p>This a simple implementation, you can introduce more paramaters for your <a href="https://yiannis123git.github.io/SmartRaycast/Channel/">Channel</a> as needed.</p>
 
 
 
