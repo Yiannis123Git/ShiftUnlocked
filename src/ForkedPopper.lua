@@ -68,10 +68,6 @@ end
 
 -- Query a point in world space and return the limit
 
-local QueryPointParams = RaycastParams.new()
-QueryPointParams.FilterType = Enum.RaycastFilterType.Include
-QueryPointParams.IgnoreWater = true
-
 function QueryPoint(Origin: Vector3, UnitDirection: Vector3, Distance: number)
 	Distance = Distance + NearPlaneZ -- We need to offset the distance by the near plane Z to get the actual distance from the camera
 	local Target = Origin + UnitDirection * Distance
@@ -82,11 +78,7 @@ function QueryPoint(Origin: Vector3, UnitDirection: Vector3, Distance: number)
 
 	-- Collision Check
 
-	local RaycastResult = workspace:Raycast(
-		Origin,
-		Target - Origin,
-		Popper.ActiveSUCamera and Popper.ActiveSUCamera.RaycastChannel.RayParams
-	)
+	local RaycastResult = (Popper.ActiveSUCamera :: any).RaycastChannel:Cast(Origin, Target - Origin)
 
 	if RaycastResult then
 		Limit = (RaycastResult.Position - Origin).Magnitude

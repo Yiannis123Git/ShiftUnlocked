@@ -367,18 +367,17 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		if self.RaycastChannel == nil then
 			-- RaycastChannel property is undefined we fallback to global channel:
 
-			if SmartRaycast.GetChannelObject(self.GlobalRaycastChannelName) == nil then
+			if SmartRaycast.GetChannel(self.GlobalRaycastChannelName) == nil then
 				-- Global channel needs to be created by the module (defualt behavior)
-				SmartRaycast.CreateChannel(self.GlobalRaycastChannelName, nil, { game.Workspace }, function(Inst)
+				SmartRaycast.CreateChannel(self.GlobalRaycastChannelName, nil, function(Inst)
 					if Inst.Transparency == 1 or Inst.CanCollide == false then
 						return true
 					end
-
 					return false
 				end, Enum.RaycastFilterType.Exclude)
 			end
 
-			self.RaycastChannel = SmartRaycast.GetChannelObject(self.GlobalRaycastChannelName) :: SmartRaycast.Channel
+			self.RaycastChannel = SmartRaycast.GetChannel(self.GlobalRaycastChannelName) :: SmartRaycast.Channel
 		end
 
 		-- Set Popper's ActiveSUCamera value
@@ -467,11 +466,14 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		-- Connect Global Character Exclusion events
 
-		local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel -- I love typechecking
+		local RaycastChannel = self.RaycastChannel :: SmartRaycast.Channel
 
-		if self.AutoExcludeChars == true and RaycastChannel.RayParams.FilterType == Enum.RaycastFilterType.Exclude then
+		if
+			self.AutoExcludeChars == true
+			and RaycastChannel.RaycastParams.FilterType == Enum.RaycastFilterType.Exclude
+		then
 			local function CharacterAdded(Character)
-				RaycastChannel:AppendToFDI(Character)
+				RaycastChannel:AddToFilter(Character)
 			end
 
 			local function PlayerAdded(Player: Player)
@@ -484,11 +486,8 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 			for _, Player in Players:GetPlayers() do
 				PlayerAdded(Player)
-				if
-					Player.Character
-					and table.find(RaycastChannel.RayParams.FilterDescendantsInstances, Player.Character) == nil
-				then -- meh i don't like duping items but maybe this check is not really needed here
-					RaycastChannel:AppendToFDI(Player.Character)
+				if Player.Character then
+					RaycastChannel:AddToFilter(Player.Character)
 				end
 			end
 
@@ -666,12 +665,17 @@ function SUCamera._Update(self: SUCamera, DT)
 		CustomMouseIconGui.Enabled = false
 	end
 
-	-- Update ZoomSpring limits and frequency
+	-- Update ZoomSpring properties
 
 	self._ZoomSpring.MinValue = self.MinZoom
 	self._ZoomSpring.MaxValue = self.MaxZoom
 
 	self._ZoomSpring.Freq = self.ZoomStiffness
+
+	if self.ZoomLocked == true then
+		self._ZoomSpring.Goal = self._ZoomSpring.CurrentPos
+		self._ZoomSpring.CurrentVelocity = 0
+	end
 
 	-- Update Vector3Spring Damping and Frequency
 
@@ -827,7 +831,7 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	--// OCCLUSION
 
-	local Zoom = self.ZoomLocked and 0 or self._ZoomSpring:Step(DT)
+	local Zoom = self.ZoomLocked and self._ZoomSpring.CurrentPos or self._ZoomSpring:Step(DT)
 	local DesiredCameraCFrame = Focus * CFrame.new(0, 0, Zoom)
 
 	-- Update ZoomState
@@ -965,10 +969,9 @@ function SUCamera._ApplyCorrectionForAxis(
 	DT: number,
 	AxisTableKey: string
 ): CFrame
-	local RaycastResult = workspace:Raycast(
+	local RaycastResult = (self.RaycastChannel :: SmartRaycast.Channel):Cast(
 		Origin,
-		VecToFocus + (VecToFocus.Unit * self._CollisionRadius),
-		(self.RaycastChannel :: SmartRaycast.Channel).RayParams
+		VecToFocus + (VecToFocus.Unit * self._CollisionRadius)
 	)
 
 	local Correction
@@ -1163,7 +1166,7 @@ function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, Game
 				* self.TouchSensitivityModifier
 
 			self:_ApplyInput(InputDelta.X, InputDelta.Y)
-		elseif #self._ActiveTouchInputs == 2 then
+		elseif #self._ActiveTouchInputs == 2 and self.ZoomLocked == false then
 			-- Camera Zoom
 			local PinchDiameter = (self._ActiveTouchInputs[1].Position - self._ActiveTouchInputs[2].Position).Magnitude
 
@@ -1257,13 +1260,13 @@ function SUCamera._KeyboardZoomStep(self: SUCamera)
 
 	local ZoomDelta = (ZoomOutState - ZoomInState) * self.ZoomSpeedKeyboard
 
-	if ZoomDelta ~= 0 then
+	if ZoomDelta ~= 0 and self.ZoomLocked == false then
 		self:_ProcessZoomDelta(ZoomDelta)
 	end
 end
 
 function SUCamera._OnMouseZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinch: number, GameProccessed: boolean)
-	if GameProccessed == true or self.ZoomLocked == true then
+	if GameProccessed == true or self.ZoomLocked == true or self.MouseLocked == false then
 		return
 	end
 

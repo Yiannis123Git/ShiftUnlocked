@@ -6,4 +6,4 @@ realm = "shared"
 
 [dependencies]
 janitor = "howmanysmall/janitor@^1.15.6"
-smartraycast = "yiannis123git/smartraycast@^1.2.1"
+smartraycast = "yiannis123git/smartraycast@^2.1.0"
