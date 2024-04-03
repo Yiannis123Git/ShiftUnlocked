@@ -25,3 +25,7 @@ Download `ShiftUnlocked.rbxm` from the [latest release](https://github.com/Yiann
 ## This project was made possible thanks to the following GitHub repositories
 * [AdvancedSpring](https://github.com/DervexDev/AdvancedSpring) by [DervexDev](https://github.com/DervexDev)
 * [RbxCameraShaker](https://github.com/Sleitnick/RbxCameraShaker) by [Sleitnick](https://github.com/Sleitnick)
+
+## License
+
+his project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Parts of this project incorporate code from [source or project name], which is licensed under the Apache License 2.0.
