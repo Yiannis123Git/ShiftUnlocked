@@ -28,4 +28,11 @@ Download `ShiftUnlocked.rbxm` from the [latest release](https://github.com/Yiann
 
 ## License
 
-his project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Parts of this project incorporate code from [source or project name], which is licensed under the Apache License 2.0.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. Parts of this project incorporate code from AdvancedSpring by DervexHero, which is licensed under the Apache License 2.0.
+
+### Apache Licensed Components
+
+The following components of this project are derived from software licensed under the Apache License 2.0:
+- [Vector3Spring](src/Vector3Spring.lua)
+
+For these components, the original licensing information, as well as any notices required by the Apache License 2.0, have been retained as per the licensing requirements. See the header comments in each file and the [APACHE_LICENSE](APACHE_LICENSE) file for the full Apache License 2.0.
