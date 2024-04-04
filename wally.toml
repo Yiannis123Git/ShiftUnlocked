@@ -1,8 +1,12 @@
 [package]
-name = "yiannis123/shiftunlocked"
+name = "yiannis123git/shiftunlocked"
+description = "ShiftUnlocked is a third-person camera module for Roblox Studio"
 version = "2.0.0"
+license = "MIT"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
+
+exclude = ["ShiftUnlockedTesting.rbxl", "Client"]
 
 [dependencies]
 janitor = "howmanysmall/janitor@^1.15.6"
