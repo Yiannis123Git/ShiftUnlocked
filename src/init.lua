@@ -672,11 +672,6 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	self._ZoomSpring.Freq = self.ZoomStiffness
 
-	if self.ZoomLocked == true then
-		self._ZoomSpring.Goal = self._ZoomSpring.CurrentPos
-		self._ZoomSpring.CurrentVelocity = 0
-	end
-
 	-- Update Vector3Spring Damping and Frequency
 
 	self._Vector3Spring.Spring.Damping = math.clamp(self.VelocityOffsetDamping, 0, 1)
@@ -831,7 +826,7 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	--// OCCLUSION
 
-	local Zoom = self.ZoomLocked and self._ZoomSpring.CurrentPos or self._ZoomSpring:Step(DT)
+	local Zoom = self._ZoomSpring:Step(DT)
 	local DesiredCameraCFrame = Focus * CFrame.new(0, 0, Zoom)
 
 	-- Update ZoomState
@@ -1031,6 +1026,12 @@ function SUCamera.Destroy(self: SUCamera)
 	-- Remove SUCamera from CameraLog table
 
 	table.remove(CameraLog, CameraLogIndex)
+end
+
+--// Set current camera zoom //--
+
+function SUCamera.SetZoom(self: SUCamera, Zoom: number)
+	self._ZoomSpring.Goal = Zoom
 end
 
 --// Camera Shake  //--
