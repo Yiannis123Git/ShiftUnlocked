@@ -61,7 +61,7 @@ The maximum distance the camera can zoom away from its subject.
 
 _Camera.MinZoom: <span style="color: teal;">number</span>_  
   
-The minimum distance the camera can zoom away from its subject.
+The maximum distance the camera can zoom in towards its subject.
 
 ## StartZoom
 

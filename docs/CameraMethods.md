@@ -48,3 +48,12 @@ ShiftUnlockedCamera:ShakeWithInstance(NewCameraShakeInstance, true)
 _Camera:Shake(Magnitude: <span style="color: teal;">number</span>, Roughness: <span style="color: teal;">number</span>, Sustain: <span style="color: teal;">boolean?</span>,  FadeInTime: <span style="color: teal;">number?</span>, FadeOutTime: <span style="color: teal;">number?</span>, PositionInfluence: <span style="color: teal;">[Vector3](https://create.roblox.com/docs/reference/engine/datatypes/Vector3)?</span>, RotationInfluence: <span style="color: teal;">[Vector3](https://create.roblox.com/docs/reference/engine/datatypes/Vector3)?</span>)_ 
   
 Shake the camera by passing the properties of a [CameraShakeInstance](https://github.com/Sleitnick/RbxCameraShaker?tab=readme-ov-file#camerashakeinstance) as arguments directly to the `:Shake` method, without the need to provide a predefined [CameraShakeInstance](https://github.com/Sleitnick/RbxCameraShaker?tab=readme-ov-file#camerashakeinstance). This is particularly useful in scenarios where a preconfigured shake is not applicable.
+
+## SetZoom
+
+_Camera:SetZoom(Zoom: <span style="color: teal;">number</span>)_ 
+  
+Sets the camera's zoom to the specified zoom number. The provided zoom will be constrained within the minimum and maximum zoom values.
+
+  
+
