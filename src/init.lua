@@ -593,6 +593,18 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			CShakeInstance:StartFadeOut(0)
 			self._CamShakeInstances[i] = nil
 		end
+
+		-- Reset Character LocalTransparencyModifier
+
+		local Character = LocalPlayer.Character
+
+		if Character then
+			for _, Descendant in Character:GetDescendants() do
+				if Descendant:IsA("BasePart") then
+					Descendant.LocalTransparencyModifier = 0
+				end
+			end
+		end
 	end
 
 	self._Enabled = Enabled -- Might cause method to be droped if code yields for to long
