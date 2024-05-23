@@ -41,6 +41,12 @@ ShiftUnlockedCamera:ShakeWithInstance(PresetCameraShakeInstance, false)
 -- Sustained custom shake 
 
 ShiftUnlockedCamera:ShakeWithInstance(NewCameraShakeInstance, true)
+
+-- Stop Sustained/One time shakes
+
+NewCameraShakeInstance:StartFadeOut(0) -- Instant Stop 
+
+PresetCameraShakeInstance:StartFadeOut(2) -- Gradual stop 
 ```
 
 ## Shake
@@ -48,6 +54,12 @@ ShiftUnlockedCamera:ShakeWithInstance(NewCameraShakeInstance, true)
 _Camera:Shake(Magnitude: <span style="color: teal;">number</span>, Roughness: <span style="color: teal;">number</span>, Sustain: <span style="color: teal;">boolean?</span>,  FadeInTime: <span style="color: teal;">number?</span>, FadeOutTime: <span style="color: teal;">number?</span>, PositionInfluence: <span style="color: teal;">[Vector3](https://create.roblox.com/docs/reference/engine/datatypes/Vector3)?</span>, RotationInfluence: <span style="color: teal;">[Vector3](https://create.roblox.com/docs/reference/engine/datatypes/Vector3)?</span>)_ 
   
 Shake the camera by passing the properties of a [CameraShakeInstance](https://github.com/Sleitnick/RbxCameraShaker?tab=readme-ov-file#camerashakeinstance) as arguments directly to the `:Shake` method, without the need to provide a predefined [CameraShakeInstance](https://github.com/Sleitnick/RbxCameraShaker?tab=readme-ov-file#camerashakeinstance). This is particularly useful in scenarios where a preconfigured shake is not applicable.
+
+## StopShaking
+
+_Camera:StopShaking(FadeOutTime: <span style="color: teal;">number</span>?)_
+  
+Stops all camera shakes using the `FadeOutTime` Argument. If no `FadeOutTime` is provided then the camera shake's `FadeInTime` will be used for each camera shake.
 
 ## SetZoom
 

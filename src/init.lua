@@ -590,7 +590,6 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		-- Reset CameraShake
 
 		for i, CShakeInstance in self._CamShakeInstances do
-			CShakeInstance:StartFadeOut(0)
 			self._CamShakeInstances[i] = nil
 		end
 
@@ -781,7 +780,7 @@ function SUCamera._Update(self: SUCamera, DT)
 		if State == CameraShakeState.Inactive and CShakeInstance.DeleteOnInactive then
 			self._CamShakeInstancesToRemove[#self._CamShakeInstancesToRemove + 1] = i
 		elseif State ~= CameraShakeState.Inactive then
-			local Shake = CShakeInstance:UpdateShake(DT)
+			local Shake = CShakeInstance:_UpdateShake(DT)
 			PosAddShake = PosAddShake + (Shake * CShakeInstance.PositionInfluence)
 			RotAddShake = RotAddShake + (Shake * CShakeInstance.RotationInfluence)
 		end
@@ -1058,7 +1057,7 @@ function SUCamera.ShakeWithInstance(
 	self._CamShakeInstances[#self._CamShakeInstances + 1] = CShakeInstance
 
 	if Sustain == true then
-		CShakeInstance:StartFadeIn(CShakeInstance.fadeInDuration)
+		CShakeInstance:StartFadeIn()
 	end
 
 	return CShakeInstance
@@ -1090,9 +1089,7 @@ end
 
 function SUCamera.StopShaking(self: SUCamera, FadeOutTime: number?)
 	for _, CShakeInstance in self._CamShakeInstances do
-		if CShakeInstance.fadeOutDuration == 0 then
-			CShakeInstance:StartFadeOut(FadeOutTime or CShakeInstance.fadeInDuration)
-		end
+		CShakeInstance:StartFadeOut(FadeOutTime or CShakeInstance.fadeInDuration)
 	end
 end
 

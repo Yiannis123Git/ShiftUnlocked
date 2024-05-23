@@ -82,7 +82,7 @@ function CameraShakeInstance.new(
 	return self
 end
 
-function CameraShakeInstance.UpdateShake(self: CameraShakeInstance, dt: number)
+function CameraShakeInstance._UpdateShake(self: CameraShakeInstance, dt: number)
 	local _tick = self.tick
 	local currentFadeTime = self.currentFadeTime
 
@@ -126,7 +126,7 @@ function CameraShakeInstance.StartFadeOut(self: CameraShakeInstance, fadeOutTime
 	self.sustain = false
 end
 
-function CameraShakeInstance.StartFadeIn(self: CameraShakeInstance, fadeInTime)
+function CameraShakeInstance.StartFadeIn(self: CameraShakeInstance, fadeInTime: number?)
 	if fadeInTime == 0 then
 		self.currentFadeTime = 1
 	end
