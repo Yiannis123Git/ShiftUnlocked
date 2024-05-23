@@ -96,6 +96,7 @@ function CreateMouseIcon(): ImageLabel
 	ScreenGui.Enabled = false
 	ScreenGui.Name = "ShiftUnlockedControllerMouseIconUI"
 	ScreenGui.IgnoreGuiInset = true
+	ScreenGui.ResetOnSpawn = false
 
 	local Frame = Instance.new("Frame")
 	Frame.Size = UDim2.new(1, 0, 1, 0)
@@ -535,8 +536,18 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		-- Reset CameraType
 
-		if self._CurrentCamera then
-			self._CurrentCamera.CameraType = Enum.CameraType.Custom
+		if game.Workspace.CurrentCamera then
+			game.Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+		end
+
+		-- ReInforce camera subject (Without this the core script that manages the camera seems to break)
+
+		if
+			game.Workspace.CurrentCamera
+			and LocalPlayer.Character
+			and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		then
+			game.Workspace.CurrentCamera.CameraSubject = LocalPlayer.Character.Humanoid
 		end
 
 		-- Reset Mouse Behavior
