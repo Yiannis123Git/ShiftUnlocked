@@ -579,6 +579,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#stopshaking" class="md-nav__link">
+    <span class="md-ellipsis">
+      StopShaking
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#setzoom" class="md-nav__link">
     <span class="md-ellipsis">
       SetZoom
@@ -696,6 +705,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#stopshaking" class="md-nav__link">
+    <span class="md-ellipsis">
+      StopShaking
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#setzoom" class="md-nav__link">
     <span class="md-ellipsis">
       SetZoom
@@ -751,10 +769,19 @@ The <code>Sustain</code> parameter determines if the camera shake should be sust
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1">-- Sustained custom shake </span>
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">ShiftUnlockedCamera</span><span class="p">:</span><span class="n">ShakeWithInstance</span><span class="p">(</span><span class="n">NewCameraShakeInstance</span><span class="p">,</span> <span class="kc">true</span><span class="p">)</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1">-- Stop Sustained/One time shakes</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">NewCameraShakeInstance</span><span class="p">:</span><span class="n">StartFadeOut</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="c1">-- Instant Stop </span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="n">PresetCameraShakeInstance</span><span class="p">:</span><span class="n">StartFadeOut</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="c1">-- Gradual stop </span>
 </code></pre></div>
 <h2 id="shake">Shake</h2>
 <p><em>Camera:Shake(Magnitude: <span style="color: teal;">number</span>, Roughness: <span style="color: teal;">number</span>, Sustain: <span style="color: teal;">boolean?</span>,  FadeInTime: <span style="color: teal;">number?</span>, FadeOutTime: <span style="color: teal;">number?</span>, PositionInfluence: <span style="color: teal;"><a href="https://create.roblox.com/docs/reference/engine/datatypes/Vector3">Vector3</a>?</span>, RotationInfluence: <span style="color: teal;"><a href="https://create.roblox.com/docs/reference/engine/datatypes/Vector3">Vector3</a>?</span>)</em> </p>
 <p>Shake the camera by passing the properties of a <a href="https://github.com/Sleitnick/RbxCameraShaker?tab=readme-ov-file#camerashakeinstance">CameraShakeInstance</a> as arguments directly to the <code>:Shake</code> method, without the need to provide a predefined <a href="https://github.com/Sleitnick/RbxCameraShaker?tab=readme-ov-file#camerashakeinstance">CameraShakeInstance</a>. This is particularly useful in scenarios where a preconfigured shake is not applicable.</p>
+<h2 id="stopshaking">StopShaking</h2>
+<p><em>Camera:StopShaking(FadeOutTime: <span style="color: teal;">number</span>?)</em></p>
+<p>Stops all camera shakes using the <code>FadeOutTime</code> Argument. If no <code>FadeOutTime</code> is provided then the camera shake's <code>FadeInTime</code> will be used for each camera shake.</p>
 <h2 id="setzoom">SetZoom</h2>
 <p><em>Camera:SetZoom(Zoom: <span style="color: teal;">number</span>)</em> </p>
 <p>Sets the camera's zoom to the specified zoom number. The provided zoom will be constrained within the minimum and maximum zoom values.</p>
