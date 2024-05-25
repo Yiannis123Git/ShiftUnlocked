@@ -225,6 +225,8 @@ type SUCameraProperties = {
 	_CurrentInputMethod: string,
 	_ActiveTouchInputs: { InputObject },
 	_LastPinchDiameter: number?,
+	FreeCamMode: boolean,
+	FreeCamCFrame: CFrame,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -273,6 +275,8 @@ function SUCamera.new(): SUCamera
 	self.TimeUntilCorrectionReversion = 0.8
 	self.CorrectionReversionSpeed = 2.5
 	self.CorrectionReversion = true
+	self.FreeCamMode = false
+	self.FreeCamCFrame = CFrame.new()
 
 	-- Camera State Variables
 
@@ -596,7 +600,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		-- Reset Vector3 Spring
 
-		self._Vector3Spring:Reset(Vector3.new(0, 0, 0))
+		self._Vector3Spring:Reset(Vector3.new())
 
 		-- Reset CameraShake
 
@@ -726,7 +730,8 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	local CameraPitchYawRotationAndXYOffset = CameraYawRotationAndXOffset * CameraPitchRotationAndYOffset
 
-	local Focus = RootPartUnrotatedCFrame * (CameraPitchYawRotationAndXYOffset * ZOffset)
+	local Focus = self.FreeCamMode == false and RootPartUnrotatedCFrame * (CameraPitchYawRotationAndXYOffset * ZOffset)
+		or self.FreeCamCFrame
 
 	--// Aplly Focus changes if needed
 
@@ -754,6 +759,13 @@ function SUCamera._Update(self: SUCamera, DT)
 		-- We do this to avoid teleportation velocity spikes:
 		-- This solution does skip frames that are caused by normal movement but it is good enough were there are no noticeable changes in testing:
 		IngnoreVelocityThisFrame = true
+	end
+
+	if self.FreeCamMode == true then
+		-- FreeCam mode is enabled we want to negate any effects of velocity offset for this frame:
+		IngnoreVelocityThisFrame = true
+		self._Vector3Spring:Reset(Vector3.new())
+		self._V3SpringConcluded = true
 	end
 
 	if
@@ -808,6 +820,18 @@ function SUCamera._Update(self: SUCamera, DT)
 		* CFrame.Angles(math.rad(RotAddShake.X), 0, math.rad(RotAddShake.Z))
 
 	Focus = Focus * ShakeCFrame
+
+	--// Avoid useless operations if FreeCam mode is enabled
+
+	if self.FreeCamMode == true then
+		self._CurrentCFrame = Focus
+		self._CurrentCamera.CFrame = self._CurrentCFrame
+		self._CurrentCamera.Focus = Focus
+
+		debug.profileend()
+
+		return -- skip the rest of the update for this frame
+	end
 
 	--// FOCUS CORRECTIONS (Order is important)
 
@@ -1167,7 +1191,7 @@ function SUCamera._ProccessGamepadInput(self: SUCamera, DT: number) -- Produces 
 end
 
 function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
-	if GameProccessed == true or self.MouseLocked == false then
+	if GameProccessed == true or self.MouseLocked == false or self.FreeCamMode == true then
 		return
 	end
 
@@ -1217,7 +1241,7 @@ function OnDynamicThumbstickFrame(Position: Vector2): boolean
 end
 
 function SUCamera._OnInputBegun(self: SUCamera, InputObject: InputObject, GameProccessed: boolean)
-	if GameProccessed == true or self.MouseLocked == false then
+	if GameProccessed == true or self.MouseLocked == false or self.FreeCamMode == true then
 		return
 	end
 
@@ -1287,7 +1311,7 @@ function SUCamera._KeyboardZoomStep(self: SUCamera)
 end
 
 function SUCamera._OnMouseZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinch: number, GameProccessed: boolean)
-	if GameProccessed == true or self.ZoomLocked == true or self.MouseLocked == false then
+	if GameProccessed == true or self.ZoomLocked == true or self.MouseLocked == false or self.FreeCamMode == true then
 		return
 	end
 
