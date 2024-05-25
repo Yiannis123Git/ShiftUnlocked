@@ -43,7 +43,7 @@ The icon will be displayed when the [MouseLocked](#mouselocked) property is set 
   
 _Camera.MouseLocked: <span style="color: teal;">boolean</span>_ 
   
-Regardless of the variable's name, it affects the camera across all platforms. Setting this value to false will unlock the mouse and set the camera to a static state, where no inputs will be accepted. This value is intended for scenarios where the player needs to interact with some form of UI, such as an inventory menu.
+Regardless of the property's name, it affects the camera across all platforms. Setting this value to false will unlock the mouse and set the camera to a static state, where no inputs will be accepted. This value is intended for scenarios where the player needs to interact with some form of UI, such as an inventory menu.
 
 ## ZoomLocked
   
