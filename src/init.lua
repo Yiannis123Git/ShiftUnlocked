@@ -91,6 +91,14 @@ end
 
 --// ShiftUnlocked Camera //--
 
+local CoreZoom = 12.5
+
+RunService:BindToRenderStep("CoreZoomUpdater", Enum.RenderPriority.Camera.Value + 1, function()
+	if game.Workspace.CurrentCamera and game.Workspace.CurrentCamera.CameraType == Enum.CameraType.Custom then
+		CoreZoom = (game.Workspace.CurrentCamera.Focus.Position - game.Workspace.CurrentCamera.CFrame.Position).Magnitude
+	end
+end)
+
 function CreateMouseIcon(): ImageLabel
 	local ScreenGui = Instance.new("ScreenGui")
 	ScreenGui.Enabled = false
@@ -113,12 +121,6 @@ function CreateMouseIcon(): ImageLabel
 
 	return ImageLabel
 end
-
---[=[
-	The ShiftUnlocked Camera 
-
-	@class SUCamera
-]=]
 
 local SUCamera = {}
 SUCamera.__index = SUCamera
@@ -227,6 +229,8 @@ type SUCameraProperties = {
 	_LastPinchDiameter: number?,
 	FreeCamMode: boolean,
 	FreeCamCFrame: CFrame,
+	SyncZoom: boolean,
+	_SyncingZoom: boolean,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -277,6 +281,7 @@ function SUCamera.new(): SUCamera
 	self.CorrectionReversion = true
 	self.FreeCamMode = false
 	self.FreeCamCFrame = CFrame.new()
+	self.SyncZoom = false
 
 	-- Camera State Variables
 
@@ -292,6 +297,7 @@ function SUCamera.new(): SUCamera
 	self._ZoomOutKeyDown = false
 	self._ActiveTouchInputs = {}
 	self._LastPinchDiameter = nil
+	self._SyncingZoom = false
 
 	-- Velocty Offset
 
@@ -500,6 +506,20 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			self._Janitor:Add(Players.PlayerRemoving:Connect(PlayerRemoving), "Disconnect")
 		end
 
+		-- Init/Reset Zoom Spring (We need to do this before we set the camera type)
+
+		if self.SyncZoom == true then
+			local StartZoom = math.clamp(CoreZoom, self.MinZoom, self.MaxZoom)
+
+			self._ZoomSpring.CurrentPos = StartZoom
+			self._ZoomSpring.Goal = StartZoom
+		else
+			self._ZoomSpring.CurrentPos = self.StartZoom
+			self._ZoomSpring.Goal = self.StartZoom
+		end
+
+		self._ZoomSpring.CurrentVelocity = 0
+
 		-- Run '_CurrentCameraChanged' and '_OnCurrentCharacterChanged'
 
 		self:_OnCurrentCharacterChanged(LocalPlayer.Character)
@@ -512,16 +532,26 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 		self._Yaw = math.atan2(-CameraLook.X, -CameraLook.Z)
 		self._Pitch = math.asin(CameraLook.Y)
 
-		-- Init/Reset Zoom Spring
-
-		self._ZoomSpring.CurrentVelocity = 0
-		self._ZoomSpring.CurrentPos = self.StartZoom
-		self._ZoomSpring.Goal = self.StartZoom
-
 		-- Init current input method
 
 		self._CurrentInputMethod = self:_GetCurrentInputMethod()
 	else
+		-- Sync the Core Camera zoom with the SUCamera zoom (Needs to be done while the camera is active)
+
+		if self.SyncZoom == true then
+			self._SyncingZoom = true
+			self._ZoomSpring.Goal = CoreZoom
+
+			while
+				not (self._CurrentRootPart == nil or self._CurrentCamera == nil or self._CurrentHumanoid == nil)
+				and math.abs(self._ZoomSpring.CurrentPos - CoreZoom) > 0.5
+			do
+				RunService.RenderStepped:Wait()
+			end
+
+			self._SyncingZoom = false
+		end
+
 		-- Unbind camera update function from render stepped
 
 		RunService:UnbindFromRenderStep("SUCameraUpdate")
@@ -1211,7 +1241,7 @@ function SUCamera._OnInputChanged(self: SUCamera, InputObject: InputObject, Game
 				* self.TouchSensitivityModifier
 
 			self:_ApplyInput(InputDelta.X, InputDelta.Y)
-		elseif #self._ActiveTouchInputs == 2 and self.ZoomLocked == false then
+		elseif #self._ActiveTouchInputs == 2 and self.ZoomLocked == false and self._SyncingZoom == false then
 			-- Camera Zoom
 			local PinchDiameter = (self._ActiveTouchInputs[1].Position - self._ActiveTouchInputs[2].Position).Magnitude
 
@@ -1305,13 +1335,19 @@ function SUCamera._KeyboardZoomStep(self: SUCamera)
 
 	local ZoomDelta = (ZoomOutState - ZoomInState) * self.ZoomSpeedKeyboard
 
-	if ZoomDelta ~= 0 and self.ZoomLocked == false then
+	if ZoomDelta ~= 0 and self.ZoomLocked == false and self._SyncingZoom == false then
 		self:_ProcessZoomDelta(ZoomDelta)
 	end
 end
 
 function SUCamera._OnMouseZoomInput(self: SUCamera, Wheel: number, Pan: Vector2, Pinch: number, GameProccessed: boolean)
-	if GameProccessed == true or self.ZoomLocked == true or self.MouseLocked == false or self.FreeCamMode == true then
+	if
+		GameProccessed == true
+		or self.ZoomLocked == true
+		or self.MouseLocked == false
+		or self.FreeCamMode == true
+		or self._SyncingZoom == true
+	then
 		return
 	end
 
@@ -1347,7 +1383,7 @@ function SUCamera._ProcessZoomDelta(self: SUCamera, ZoomDelta: number)
 end
 
 function SUCamera._OnControllerZoomInput(self: SUCamera)
-	if self.ZoomLocked == true then
+	if self.ZoomLocked == true or self._SyncingZoom == true then
 		return
 	end
 
