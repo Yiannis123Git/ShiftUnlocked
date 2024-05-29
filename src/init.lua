@@ -231,6 +231,8 @@ type SUCameraProperties = {
 	FreeCamCFrame: CFrame,
 	SyncZoom: boolean,
 	_SyncingZoom: boolean,
+	_CharacterOverriden: boolean,
+	_CharacterOverride: Instance?,
 }
 
 export type SUCamera = typeof(setmetatable({} :: SUCameraProperties, SUCamera))
@@ -298,6 +300,7 @@ function SUCamera.new(): SUCamera
 	self._ActiveTouchInputs = {}
 	self._LastPinchDiameter = nil
 	self._SyncingZoom = false
+	self._CharacterOverriden = false
 
 	-- Velocty Offset
 
@@ -340,6 +343,7 @@ function SUCamera.new(): SUCamera
 	self._CamShakeInstancesToRemove = {}
 	self._SavedCursor = UserInputService.MouseIcon
 	self._CustomMouseIcon = CreateMouseIcon()
+	self._CharacterOverride = nil
 
 	-- Insert SUCamera to CameraLog table
 
@@ -454,6 +458,11 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		self._Janitor:Add(
 			LocalPlayer.CharacterAdded:Connect(function(Character: Instance?)
+				if self._CharacterOverriden == true then
+					-- Character is overriden local character should not be used:
+					return
+				end
+
 				self:_OnCurrentCharacterChanged(Character)
 			end),
 			"Disconnect"
@@ -461,6 +470,11 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		self._Janitor:Add(
 			LocalPlayer.CharacterRemoving:Connect(function()
+				if self._CharacterOverriden == true then
+					-- Character is overriden local character should not be used:
+					return
+				end
+
 				self:_OnCurrentCharacterChanged(nil)
 			end),
 			"Disconnect"
@@ -522,7 +536,9 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		-- Run '_CurrentCameraChanged' and '_OnCurrentCharacterChanged'
 
-		self:_OnCurrentCharacterChanged(LocalPlayer.Character)
+		self:_OnCurrentCharacterChanged(
+			self._CharacterOverriden == false and LocalPlayer.Character or self._CharacterOverride
+		)
 		self:_CurrentCameraChanged(workspace.CurrentCamera)
 
 		-- Make transition to custom camera smooth by facing in same direction as previous camera
@@ -624,8 +640,8 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		-- Set AutoRotate to true if possible
 
-		if self._CurrentHumanoid then
-			self._CurrentHumanoid.AutoRotate = true
+		if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+			LocalPlayer.Character.Humanoid.AutoRotate = true
 		end
 
 		-- Reset Vector3 Spring
@@ -640,7 +656,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		-- Reset Character LocalTransparencyModifier
 
-		local Character = LocalPlayer.Character
+		local Character = self._CharacterOverriden == false and LocalPlayer.Character or self._CharacterOverride
 
 		if Character then
 			for _, Descendant in Character:GetDescendants() do
@@ -1071,6 +1087,10 @@ function SUCamera._IsHumanoidControllable(self: SUCamera)
 		return false
 	end
 
+	if self._CurrentHumanoid.Parent ~= LocalPlayer.Character then
+		return false
+	end
+
 	local HumanoidState = self._CurrentHumanoid:GetState()
 
 	return ControllableStates[HumanoidState]
@@ -1155,6 +1175,29 @@ end
 function SUCamera.StopShaking(self: SUCamera, FadeOutTime: number?)
 	for _, CShakeInstance in self._CamShakeInstances do
 		CShakeInstance:StartFadeOut(FadeOutTime or CShakeInstance.fadeInDuration)
+	end
+end
+
+--// Set Character //--
+
+function SUCamera.SetCharacter(self: SUCamera, Character)
+	assert(Character ~= nil, "[ShiftUnlocked] Cannot set character because character is nil")
+	assert(
+		Character:FindFirstChild("Humanoid") ~= nil,
+		"[ShiftUnlocked] Cannot set character because character does not have a humanoid"
+	)
+
+	if Character == LocalPlayer.Character then
+		-- Switch back to normal character handling:
+		self._CharacterOverride = nil
+		self._CharacterOverriden = false
+
+		self:_OnCurrentCharacterChanged(LocalPlayer.Character)
+	else
+		self._CharacterOverriden = true
+		self._CharacterOverride = Character
+
+		self:_OnCurrentCharacterChanged(Character)
 	end
 end
 
