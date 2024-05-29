@@ -13,6 +13,9 @@ Creates a new camera instance.
 
 ## SetEnabled
 
+!!! Info
+    If [`SyncZoom`](CameraProperties.md#synczoom) is enabled, deactivation calls will yield for a short period of time.
+
 _Camera:SetEnabled(Enabled: <span style="color: teal;">boolean</span>)_ 
 
 Enables or disables the camera based on the passed value: `true` to enable and `false` to disable the camera.    
@@ -66,6 +69,13 @@ Stops all camera shakes using the `FadeOutTime` Argument. If no `FadeOutTime` is
 _Camera:SetZoom(Zoom: <span style="color: teal;">number</span>)_ 
   
 Sets the camera's zoom to the specified zoom number. The provided zoom will be constrained within the minimum and maximum zoom values.
+
+## SetCharacter
+
+_Camera:SetCharacter(Character)_
+
+Sets a character to override the local player's character. You can use any character that contains a humanoid. The character will act as the new character that the camera uses. This feature can be used for spectating other players or NPCs. To re-enable the default behavior, use SetCharacter on the local player's character.
+
 
   
 

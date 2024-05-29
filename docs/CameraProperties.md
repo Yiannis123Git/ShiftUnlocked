@@ -31,13 +31,13 @@ The maximum degrees to which the camera can be angled up and down. This value ca
   
 _Camera.LockedIcon: <span style="color: teal;">string</span>_  
   
-The icon will be displayed when the [MouseLocked](#mouselocked) property is set to true. Setting this to nil disables the icon functionality on mobile and consoles.
+The icon will be displayed when the [`MouseLocked`](#mouselocked) property is set to true. Setting this to nil disables the icon functionality on mobile and consoles.
 
 ## UnlockedIcon 
   
 _Camera.UnlockedIcon: <span style="color: teal;">string</span>_  
 
-The icon will be displayed when the [MouseLocked](#mouselocked) property is set to false. This functionality is only available on PC.
+The icon will be displayed when the [`MouseLocked`](#mouselocked) property is set to false. This functionality is only available on PC.
 
 ## MouseLocked
   
@@ -116,6 +116,12 @@ The key responsible for zooming in on keyboard. Setting this to `nil` will disab
 _Camera.ZoomOutKeyboardKey: <span style="color: teal;">[Enum.KeyCode](https://create.roblox.com/docs/reference/engine/enums/KeyCode) | nil</span>_  
 
 The key responsible for zooming out on keyboard. Setting this to `nil` will disable the zoom out functionality on keyboard.
+
+## SyncZoom
+
+_Camera.SyncZoom: <span style="color: teal;">boolean</span>_ 
+  
+When this property is set to true, the camera will attempt to sync its zoom with Roblox's default camera zoom when the camera gets enabled or disabled. Enabling this behavior will introduce yielding when disabling the camera via the [`SetEnabled`](CameraMethods.md#setenabled) method until the sync is achieved.
 
 ## MouseRadsPerPixel
 
@@ -199,7 +205,7 @@ Determines whether the camera will "lag behind" at certain velocity speeds to ma
 
 _Camera.AllowVelocityOffsetOnTeleport: <span style="color: teal;">boolean</span>_
   
-Whether or not the camera should treat the player's character teleportation as regular motion. The module tries its best to detect when teleportation occurs, but the ideal way to handle spikes in velocity due to teleportation is to manually set [VelocityOffset](#velocityoffset) to true or false accordingly during runtime, based on whether a teleport is about to be performed on the player's character. If you are planning to introduce your own logic to detect teleportation, then you should set this property to true.
+Whether or not the camera should treat the player's character teleportation as regular motion. The module tries its best to detect when teleportation occurs, but the ideal way to handle spikes in velocity due to teleportation is to manually set [`VelocityOffset`](#velocityoffset) to true or false accordingly during runtime, based on whether a teleport is about to be performed on the player's character. If you are planning to introduce your own logic to detect teleportation, then you should set this property to true.
 
 ## VelocityOffsetVelocityThreshold
 
@@ -219,10 +225,17 @@ _Camera.VelocityOffsetDamping: <span style="color: teal;">number</span>_
   
 The amplitude of oscillations as the velocity offset reaches its target.
 
+## FreeCamMode
+  
+_Camera.FreeCamMode: <span style="color: teal;">boolean</span>_   
+  
+This property controls the current mode of the camera. Setting this property to true will disable the normal camera update process. The camera will rely on the  [`FreeCamCFrame`](#freecamcframe) property for its position and orientation. The camera can still be influenced via the camera shake functionality in this mode.
 
+## FreeCamCFrame
 
-
-
+_Camera.FreeCamCFrame: <span style="color: teal;">[CFrame](https://create.roblox.com/docs/reference/engine/datatypes/CFrame)</span>_ 
+  
+This property will be used to determine the camera's position and orientation when [`FreeCamMode`](#freecammode) is set to true. You can use this property to animate or statically position the camera during cutscenes.
 
   
 

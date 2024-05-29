@@ -45,7 +45,4 @@ This setting just points to the CameraShakeInstance module for easy use.
   
 _shiftUnlocked.CameraShakePresets: <span style="color: teal;">table</span>_
   
-This setting just points to the CameraShakePresets module for easy use.
-  
-!!! warning
-    This setting is not intended to be modified.  
+This setting points to the CameraShakePresets module for easy use. You can change this value to point to your own presets if convenient.
