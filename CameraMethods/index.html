@@ -596,6 +596,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#setcharacter" class="md-nav__link">
+    <span class="md-ellipsis">
+      SetCharacter
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -722,6 +731,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#setcharacter" class="md-nav__link">
+    <span class="md-ellipsis">
+      SetCharacter
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -750,6 +768,10 @@
 <p><em>Camera.new(): <span style="color: teal;">SUCamera</span></em> </p>
 <p>Creates a new camera instance.</p>
 <h2 id="setenabled">SetEnabled</h2>
+<div class="admonition info">
+<p class="admonition-title">Info</p>
+<p>If <a href="../CameraProperties/#synczoom"><code>SyncZoom</code></a> is enabled, deactivation calls will yield for a short period of time.</p>
+</div>
 <p><em>Camera:SetEnabled(Enabled: <span style="color: teal;">boolean</span>)</em> </p>
 <p>Enables or disables the camera based on the passed value: <code>true</code> to enable and <code>false</code> to disable the camera.    </p>
 <h2 id="destroy">Destroy</h2>
@@ -785,6 +807,9 @@ The <code>Sustain</code> parameter determines if the camera shake should be sust
 <h2 id="setzoom">SetZoom</h2>
 <p><em>Camera:SetZoom(Zoom: <span style="color: teal;">number</span>)</em> </p>
 <p>Sets the camera's zoom to the specified zoom number. The provided zoom will be constrained within the minimum and maximum zoom values.</p>
+<h2 id="setcharacter">SetCharacter</h2>
+<p><em>Camera:SetCharacter(Character)</em></p>
+<p>Sets a character to override the local player's character. You can use any character that contains a humanoid. The character will act as the new character that the camera uses. This feature can be used for spectating other players or NPCs. To re-enable the default behavior, use SetCharacter on the local player's character.</p>
 
 
 

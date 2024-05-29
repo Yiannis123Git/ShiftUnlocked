@@ -675,6 +675,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#synczoom" class="md-nav__link">
+    <span class="md-ellipsis">
+      SyncZoom
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mouseradsperpixel" class="md-nav__link">
     <span class="md-ellipsis">
       MouseRadsPerPixel
@@ -822,6 +831,24 @@
   <a href="#velocityoffsetdamping" class="md-nav__link">
     <span class="md-ellipsis">
       VelocityOffsetDamping
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#freecammode" class="md-nav__link">
+    <span class="md-ellipsis">
+      FreeCamMode
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#freecamcframe" class="md-nav__link">
+    <span class="md-ellipsis">
+      FreeCamCFrame
     </span>
   </a>
   
@@ -1074,6 +1101,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#synczoom" class="md-nav__link">
+    <span class="md-ellipsis">
+      SyncZoom
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mouseradsperpixel" class="md-nav__link">
     <span class="md-ellipsis">
       MouseRadsPerPixel
@@ -1226,6 +1262,24 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#freecammode" class="md-nav__link">
+    <span class="md-ellipsis">
+      FreeCamMode
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#freecamcframe" class="md-nav__link">
+    <span class="md-ellipsis">
+      FreeCamCFrame
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1263,10 +1317,10 @@
 <p>The maximum degrees to which the camera can be angled up and down. This value can be set to any number between 1 and 89.9.</p>
 <h2 id="lockedicon">LockedIcon</h2>
 <p><em>Camera.LockedIcon: <span style="color: teal;">string</span></em>  </p>
-<p>The icon will be displayed when the <a href="#mouselocked">MouseLocked</a> property is set to true. Setting this to nil disables the icon functionality on mobile and consoles.</p>
+<p>The icon will be displayed when the <a href="#mouselocked"><code>MouseLocked</code></a> property is set to true. Setting this to nil disables the icon functionality on mobile and consoles.</p>
 <h2 id="unlockedicon">UnlockedIcon</h2>
 <p><em>Camera.UnlockedIcon: <span style="color: teal;">string</span></em>  </p>
-<p>The icon will be displayed when the <a href="#mouselocked">MouseLocked</a> property is set to false. This functionality is only available on PC.</p>
+<p>The icon will be displayed when the <a href="#mouselocked"><code>MouseLocked</code></a> property is set to false. This functionality is only available on PC.</p>
 <h2 id="mouselocked">MouseLocked</h2>
 <p><em>Camera.MouseLocked: <span style="color: teal;">boolean</span></em> </p>
 <p>Regardless of the property's name, it affects the camera across all platforms. Setting this value to false will unlock the mouse and set the camera to a static state, where no inputs will be accepted. This value is intended for scenarios where the player needs to interact with some form of UI, such as an inventory menu.</p>
@@ -1306,6 +1360,9 @@
 <h2 id="zoomoutkeyboardkey">ZoomOutKeyboardKey</h2>
 <p><em>Camera.ZoomOutKeyboardKey: <span style="color: teal;"><a href="https://create.roblox.com/docs/reference/engine/enums/KeyCode">Enum.KeyCode</a> | nil</span></em>  </p>
 <p>The key responsible for zooming out on keyboard. Setting this to <code>nil</code> will disable the zoom out functionality on keyboard.</p>
+<h2 id="synczoom">SyncZoom</h2>
+<p><em>Camera.SyncZoom: <span style="color: teal;">boolean</span></em> </p>
+<p>When this property is set to true, the camera will attempt to sync its zoom with Roblox's default camera zoom when the camera gets enabled or disabled. Enabling this behavior will introduce yielding when disabling the camera via the <a href="../CameraMethods/#setenabled"><code>SetEnabled</code></a> method until the sync is achieved.</p>
 <h2 id="mouseradsperpixel">MouseRadsPerPixel</h2>
 <p><em>Camera.MouseRadsPerPixel: <span style="color: teal;"><a href="https://create.roblox.com/docs/reference/engine/datatypes/Vector2">Vector2</a></span></em>     </p>
 <p>Affects the sensitivity of mouse camera movement inputs.</p>
@@ -1347,7 +1404,7 @@
 <p>Determines whether the camera will "lag behind" at certain velocity speeds to make the camera movement feel more dynamic.</p>
 <h2 id="allowvelocityoffsetonteleport">AllowVelocityOffsetOnTeleport</h2>
 <p><em>Camera.AllowVelocityOffsetOnTeleport: <span style="color: teal;">boolean</span></em></p>
-<p>Whether or not the camera should treat the player's character teleportation as regular motion. The module tries its best to detect when teleportation occurs, but the ideal way to handle spikes in velocity due to teleportation is to manually set <a href="#velocityoffset">VelocityOffset</a> to true or false accordingly during runtime, based on whether a teleport is about to be performed on the player's character. If you are planning to introduce your own logic to detect teleportation, then you should set this property to true.</p>
+<p>Whether or not the camera should treat the player's character teleportation as regular motion. The module tries its best to detect when teleportation occurs, but the ideal way to handle spikes in velocity due to teleportation is to manually set <a href="#velocityoffset"><code>VelocityOffset</code></a> to true or false accordingly during runtime, based on whether a teleport is about to be performed on the player's character. If you are planning to introduce your own logic to detect teleportation, then you should set this property to true.</p>
 <h2 id="velocityoffsetvelocitythreshold">VelocityOffsetVelocityThreshold</h2>
 <p><em>Camera.VelocityOffsetVelocityThreshold: <span style="color: teal;">number</span></em> </p>
 <p>The minimum camera movement velocity required to start applying the velocity offset.   </p>
@@ -1357,6 +1414,12 @@
 <h2 id="velocityoffsetdamping">VelocityOffsetDamping</h2>
 <p><em>Camera.VelocityOffsetDamping: <span style="color: teal;">number</span></em> </p>
 <p>The amplitude of oscillations as the velocity offset reaches its target.</p>
+<h2 id="freecammode">FreeCamMode</h2>
+<p><em>Camera.FreeCamMode: <span style="color: teal;">boolean</span></em>   </p>
+<p>This property controls the current mode of the camera. Setting this property to true will disable the normal camera update process. The camera will rely on the  <a href="#freecamcframe"><code>FreeCamCFrame</code></a> property for its position and orientation. The camera can still be influenced via the camera shake functionality in this mode.</p>
+<h2 id="freecamcframe">FreeCamCFrame</h2>
+<p><em>Camera.FreeCamCFrame: <span style="color: teal;"><a href="https://create.roblox.com/docs/reference/engine/datatypes/CFrame">CFrame</a></span></em> </p>
+<p>This property will be used to determine the camera's position and orientation when <a href="#freecammode"><code>FreeCamMode</code></a> is set to true. You can use this property to animate or statically position the camera during cutscenes.</p>
 
 
 
