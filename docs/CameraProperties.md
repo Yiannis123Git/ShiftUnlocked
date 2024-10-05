@@ -39,6 +39,12 @@ _Camera.UnlockedIcon: <span style="color: teal;">string</span>_
 
 The icon will be displayed when the [`MouseLocked`](#mouselocked) property is set to false. This functionality is only available on PC.
 
+## AdjustedControllerIconDisplay
+
+_Camera.AdjustedControllerIconDisplay: <span style="color: teal;">boolean</span>_ 
+
+Roblox adjusts the mouse/cursor position when using a gamepad. If you want consistent icon behavior across all devices, set this property to true. If set to true, the mouse icon will be readjusted to reflect the PC position when playing on a gamepad. Due to technical limitations, this adjustment is only visual; the actual mouse will still be offset by Roblox. To account for this, please write your code accordingly. For example, if a gun relies on the mouse position, the bullets will not fire at the cursor position that the player can see but at the invisible cursor that is positioned above the visible cursor. This property would be more applicable to a "melee fighting" style of game rather than a shooter game.
+
 ## MouseLocked
   
 _Camera.MouseLocked: <span style="color: teal;">boolean</span>_ 
