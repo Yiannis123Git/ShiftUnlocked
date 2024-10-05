@@ -558,6 +558,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#adjustedcontrollericondisplay" class="md-nav__link">
+    <span class="md-ellipsis">
+      AdjustedControllerIconDisplay
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mouselocked" class="md-nav__link">
     <span class="md-ellipsis">
       MouseLocked
@@ -984,6 +993,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#adjustedcontrollericondisplay" class="md-nav__link">
+    <span class="md-ellipsis">
+      AdjustedControllerIconDisplay
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#mouselocked" class="md-nav__link">
     <span class="md-ellipsis">
       MouseLocked
@@ -1321,6 +1339,9 @@
 <h2 id="unlockedicon">UnlockedIcon</h2>
 <p><em>Camera.UnlockedIcon: <span style="color: teal;">string</span></em>  </p>
 <p>The icon will be displayed when the <a href="#mouselocked"><code>MouseLocked</code></a> property is set to false. This functionality is only available on PC.</p>
+<h2 id="adjustedcontrollericondisplay">AdjustedControllerIconDisplay</h2>
+<p><em>Camera.AdjustedControllerIconDisplay: <span style="color: teal;">boolean</span></em> </p>
+<p>Roblox adjusts the mouse/cursor position when using a gamepad. If you want consistent icon behavior across all devices, set this property to true. If set to true, the mouse icon will be readjusted to reflect the PC position when playing on a gamepad. Due to technical limitations, this adjustment is only visual; the actual mouse will still be offset by Roblox. To account for this, please write your code accordingly. For example, if a gun relies on the mouse position, the bullets will not fire at the cursor position that the player can see but at the invisible cursor that is positioned above the visible cursor. This property would be more applicable to a "melee fighting" style of game rather than a shooter game.</p>
 <h2 id="mouselocked">MouseLocked</h2>
 <p><em>Camera.MouseLocked: <span style="color: teal;">boolean</span></em> </p>
 <p>Regardless of the property's name, it affects the camera across all platforms. Setting this value to false will unlock the mouse and set the camera to a static state, where no inputs will be accepted. This value is intended for scenarios where the player needs to interact with some form of UI, such as an inventory menu.</p>
