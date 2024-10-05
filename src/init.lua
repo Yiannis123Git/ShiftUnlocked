@@ -395,6 +395,10 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 			self.RaycastChannel = SmartRaycast.GetChannel(self.GlobalRaycastChannelName) :: SmartRaycast.Channel
 		end
 
+		-- Record the mouse icon before camera was enabled
+
+		self._SavedCursor = UserInputService.MouseIcon
+
 		-- Set Popper's ActiveSUCamera value
 
 		Popper.ActiveSUCamera = self :: any -- Avoid typecheck issue due it expecting a nil value
