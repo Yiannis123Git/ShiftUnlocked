@@ -143,6 +143,8 @@ type SUCameraProperties = {
 	_Janitor: JanitorModule.Janitor,
 	LockedIcon: string?,
 	UnlockedIcon: string?,
+	AdjustedControllerIconDisplay: boolean,
+	_HidingMouseIcon: boolean,
 	PitchLimit: number,
 	_Yaw: number,
 	_Pitch: number,
@@ -288,6 +290,7 @@ function SUCamera.new(): SUCamera
 	self.FreeCamMode = false
 	self.FreeCamCFrame = CFrame.new()
 	self.SyncZoom = false
+	self.AdjustedControllerIconDisplay = false
 
 	-- Camera State Variables
 
@@ -305,6 +308,7 @@ function SUCamera.new(): SUCamera
 	self._LastPinchDiameter = nil
 	self._SyncingZoom = false
 	self._CharacterOverriden = false
+	self._HidingMouseIcon = false
 
 	-- Velocty Offset
 
@@ -707,21 +711,23 @@ function SUCamera._Update(self: SUCamera, DT)
 
 	-- Update Mouse state and "Mouse" Icon
 
-	if self.MouseLocked == true then
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+	if self._HidingMouseIcon == false then
+		if self.MouseLocked == true then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
 
-		if self.LockedIcon then
-			UserInputService.MouseIcon = self.LockedIcon
+			if self.LockedIcon then
+				UserInputService.MouseIcon = self.LockedIcon
+			else
+				UserInputService.MouseIcon = self._SavedCursor
+			end
 		else
-			UserInputService.MouseIcon = self._SavedCursor
-		end
-	else
-		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 
-		if self.UnlockedIcon then
-			UserInputService.MouseIcon = self.UnlockedIcon
-		else
-			UserInputService.MouseIcon = self._SavedCursor
+			if self.UnlockedIcon then
+				UserInputService.MouseIcon = self.UnlockedIcon
+			else
+				UserInputService.MouseIcon = self._SavedCursor
+			end
 		end
 	end
 
@@ -736,14 +742,21 @@ function SUCamera._Update(self: SUCamera, DT)
 	end
 
 	if
-		UserInputService.MouseIconEnabled == true
-		and self._CurrentInputMethod ~= "Mouse&Keyboard"
-		and self.LockedIcon
+		self.LockedIcon
 		and self.MouseLocked == true
+		and UserInputService.MouseIconEnabled
+		and (
+			self._CurrentInputMethod == "Touch"
+			or (self._CurrentInputMethod == "Gamepad" and self.AdjustedControllerIconDisplay)
+		)
 	then
 		self._CustomMouseIconGUIInstances.Gui.Enabled = true
+
+		UserInputService.MouseIcon = "http://www.roblox.com/asset/?id=116979418511572" -- switch icon to blank in case of controller to hide the roblox mouse icon
+		self._HidingMouseIcon = true
 	else
 		self._CustomMouseIconGUIInstances.Gui.Enabled = false
+		self._HidingMouseIcon = false
 	end
 
 	-- Update ZoomSpring properties
