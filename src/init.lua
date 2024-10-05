@@ -99,7 +99,7 @@ RunService:BindToRenderStep("CoreZoomUpdater", Enum.RenderPriority.Camera.Value 
 	end
 end)
 
-function CreateMouseIcon(): ImageLabel
+function CreateMouseIconGui(): { Gui: ScreenGui, Frame: Frame, Icon: ImageLabel }
 	local ScreenGui = Instance.new("ScreenGui")
 	ScreenGui.Enabled = false
 	ScreenGui.Name = "ShiftUnlockedControllerMouseIconUI"
@@ -119,7 +119,11 @@ function CreateMouseIcon(): ImageLabel
 
 	ScreenGui.Parent = LocalPlayer.PlayerGui
 
-	return ImageLabel
+	return {
+		Gui = ScreenGui,
+		Frame = Frame,
+		Icon = ImageLabel,
+	}
 end
 
 local SUCamera = {}
@@ -223,7 +227,7 @@ type SUCameraProperties = {
 	_CamShakeInstances: { CameraShakeInstance.CameraShakeInstance },
 	_CamShakeInstancesToRemove: { number },
 	_SavedCursor: string,
-	_CustomMouseIcon: ImageLabel,
+	_CustomMouseIconGUIInstances: { Gui: ScreenGui, Frame: Frame, Icon: ImageLabel },
 	_CurrentInputMethod: string,
 	_ActiveTouchInputs: { InputObject },
 	_LastPinchDiameter: number?,
@@ -342,7 +346,7 @@ function SUCamera.new(): SUCamera
 	self._CamShakeInstances = {}
 	self._CamShakeInstancesToRemove = {}
 	self._SavedCursor = UserInputService.MouseIcon
-	self._CustomMouseIcon = CreateMouseIcon()
+	self._CustomMouseIconGUIInstances = CreateMouseIconGui()
 	self._CharacterOverride = nil
 
 	-- Insert SUCamera to CameraLog table
@@ -611,8 +615,7 @@ function SUCamera.SetEnabled(self: SUCamera, Enabled: boolean)
 
 		-- Hide controller mouse icon
 
-		local CustomMouseIconGui = (self._CustomMouseIcon.Parent :: Frame).Parent :: ScreenGui
-		CustomMouseIconGui.Enabled = false
+		self._CustomMouseIconGUIInstances.Gui.Enabled = false
 
 		-- Reset Camera State Variables
 
@@ -722,12 +725,14 @@ function SUCamera._Update(self: SUCamera, DT)
 		end
 	end
 
+	-- Check integrity of custom mouse icon gui
+
+	self:_CheckCustomMouseIconGUIIntegrity()
+
 	-- Custom mouse icon
 
-	local CustomMouseIconGui = (self._CustomMouseIcon.Parent :: Frame).Parent :: ScreenGui
-
 	if self.LockedIcon then
-		self._CustomMouseIcon.Image = self.LockedIcon
+		self._CustomMouseIconGUIInstances.Icon.Image = self.LockedIcon
 	end
 
 	if
@@ -736,9 +741,9 @@ function SUCamera._Update(self: SUCamera, DT)
 		and self.LockedIcon
 		and self.MouseLocked == true
 	then
-		CustomMouseIconGui.Enabled = true
+		self._CustomMouseIconGUIInstances.Gui.Enabled = true
 	else
-		CustomMouseIconGui.Enabled = false
+		self._CustomMouseIconGUIInstances.Gui.Enabled = false
 	end
 
 	-- Update ZoomSpring properties
@@ -1118,10 +1123,11 @@ function SUCamera.Destroy(self: SUCamera)
 
 	self._Janitor:Destroy()
 
-	-- Destroy custom mouse icon GUI instance
+	-- Destroy custom mouse icon GUI instances
 
-	local CustomMouseIconGui = (self._CustomMouseIcon.Parent :: Frame).Parent :: ScreenGui
-	CustomMouseIconGui:Destroy()
+	for _, InstanceToDestroy in self._CustomMouseIconGUIInstances do
+		(InstanceToDestroy :: Instance):Destroy()
+	end
 
 	-- Remove SUCamera from CameraLog table
 
@@ -1631,6 +1637,24 @@ function SUCamera._HandleCharacterTrasparency(self: SUCamera)
 	end
 
 	self._LastDistanceFromRoot = Distance
+end
+
+--// Check if custom mouse icon gui is ok //--
+
+function SUCamera._CheckCustomMouseIconGUIIntegrity(self: SUCamera)
+	for _, Instance in self._CustomMouseIconGUIInstances do
+		local Moved = not ((Instance :: Instance):FindFirstAncestorOfClass("PlayerGui"))
+
+		if Moved then
+			for _, InstanceToDestroy in self._CustomMouseIconGUIInstances do
+				(InstanceToDestroy :: Instance):Destroy()
+			end
+
+			self._CustomMouseIconGUIInstances = CreateMouseIconGui()
+
+			break
+		end
+	end
 end
 
 return SUCamera
