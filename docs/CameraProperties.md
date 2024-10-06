@@ -181,7 +181,12 @@ If the camera moves closer to the player's character than this range, the charac
   
 _Camera.RotateCharacter: <span style="color: teal;">boolean</span>_   
   
-Sets whether or not the Humanoid will automatically rotate to face in the direction the camera is looking.
+Sets whether or not the Humanoid will automatically rotate to face in the direction the camera is looking. When set to false, the character rotation will no longer be updated at all. This is done to allow you to add custom character rotation behavior while still retaining the camera functionality. If you want the character to rotate in the direction they are moving, simply set the local character's humanoid AutoRotate property to true after you disable the camera's RotateCharacter property.
+
+```lua
+ShiftUnlockedCamera.RotateCharacter = false 
+LocalPlayer.Character.Humanoid.AutoRotate = true
+```
 
 ## CorrectionReversion
 
