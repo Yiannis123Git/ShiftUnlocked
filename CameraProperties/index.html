@@ -1410,7 +1410,10 @@
 <p>If the camera moves closer to the player's character than this range, the character will start to become transparent for better camera visibility.</p>
 <h2 id="rotatecharacter">RotateCharacter</h2>
 <p><em>Camera.RotateCharacter: <span style="color: teal;">boolean</span></em>   </p>
-<p>Sets whether or not the Humanoid will automatically rotate to face in the direction the camera is looking.</p>
+<p>Sets whether or not the Humanoid will automatically rotate to face in the direction the camera is looking. When set to false, the character rotation will no longer be updated at all. This is done to allow you to add custom character rotation behavior while still retaining the camera functionality. If you want the character to rotate in the direction they are moving, simply set the local character's humanoid AutoRotate property to true after you disable the camera's RotateCharacter property.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">ShiftUnlockedCamera</span><span class="p">.</span><span class="n">RotateCharacter</span> <span class="o">=</span> <span class="kc">false</span> 
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">LocalPlayer</span><span class="p">.</span><span class="n">Character</span><span class="p">.</span><span class="n">Humanoid</span><span class="p">.</span><span class="n">AutoRotate</span> <span class="o">=</span> <span class="kc">true</span>
+</code></pre></div>
 <h2 id="correctionreversion">CorrectionReversion</h2>
 <p><em>Camera.CorrectionReversion: <span style="color: teal;">boolean</span></em>  </p>
 <p>Whether or not camera collision corrections will be reverted gradually or instantly.</p>
